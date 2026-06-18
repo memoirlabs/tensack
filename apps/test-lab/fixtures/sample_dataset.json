@@ -1,0 +1,7 @@
+[
+  {"id": 1, "type": "user", "payload": {"name": "alice", "active": true}, "ts": 1700000001000},
+  {"id": 2, "type": "user", "payload": {"name": "bob", "active": false}, "ts": 1700000002000},
+  {"id": 3, "type": "event", "payload": {"name": "insert", "target": "users"}, "ts": 1700000003000},
+  {"id": 4, "type": "metric", "payload": {"name": "cpu_ms", "value": 32.1}, "ts": 1700000004000},
+  {"id": 5, "type": "event", "payload": {"name": "flush", "duration_ms": 9}, "ts": 1700000005000}
+]

@@ -1,0 +1,28 @@
+[workspace]
+members = [
+  "apps/tensack",
+  "packages/tensack",
+  "packages/tensack-core",
+  "packages/tensack-format",
+  "packages/tensack-store",
+  "packages/tensack-cli",
+  "packages/tensack-testkit",
+  "packages/tensack-schema-compiler",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/tensack/tensack"
+
+[workspace.dependencies]
+tensack = { path = "packages/tensack" }
+tensack-core = { path = "packages/tensack-core" }
+tensack-format = { path = "packages/tensack-format" }
+tensack-store = { path = "packages/tensack-store" }
+tensack-cli = { path = "packages/tensack-cli" }
+tensack-testkit = { path = "packages/tensack-testkit" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

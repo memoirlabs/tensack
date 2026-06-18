@@ -1,0 +1,9 @@
+[package]
+name = "tensack-schema-compiler"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/tensack/tensack"
+
+[dependencies]
+tensack-core.workspace = true

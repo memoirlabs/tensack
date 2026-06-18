@@ -1,0 +1,13 @@
+[package]
+name = "tensack-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "tensack"
+path = "src/main.rs"
+
+[dependencies]
+tensack-cli.workspace = true

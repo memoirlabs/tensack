@@ -1,0 +1,13 @@
+[package]
+name = "tensack-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+tensack-core.workspace = true
+tensack-format.workspace = true

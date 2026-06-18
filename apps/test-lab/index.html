@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tensack Test Lab</title>
+    <style>
+      :root {
+        font-family: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        color: #1f2937;
+        background: #f5f7fb;
+      }
+
+      body {
+        margin: 0;
+        padding: 20px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+        max-width: 960px;
+      }
+
+      .card {
+        background: white;
+        border: 1px solid #d8dee9;
+        border-radius: 8px;
+        padding: 14px;
+      }
+
+      h1, h2 {
+        margin: 0 0 10px;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      button,
+      input[type="number"] {
+        font: inherit;
+      }
+
+      pre {
+        margin: 0;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 8px;
+        overflow: auto;
+        max-height: 240px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <section class="card">
+        <h1>Tensack Test Lab</h1>
+        <p>
+          Standalone experimentation shell for speed/sync checks, parse experiments,
+          and future data viewer exploration. This is not user-facing and not part
+          of the CLI binary.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Data loader</h2>
+        <div class="row">
+          <input id="snapshot-file" type="file" accept=".json,application/json" />
+          <button id="load-file">Load snapshot</button>
+          <button id="clear-data">Clear</button>
+        </div>
+        <pre id="snapshot-output">No snapshot loaded.</pre>
+      </section>
+
+      <section class="card">
+        <h2>Speed check</h2>
+        <div class="row">
+          <label for="row-count">Rows</label>
+          <input id="row-count" type="number" value="50000" min="100" step="100" />
+          <button id="run-speed">Run speed test</button>
+        </div>
+        <pre id="speed-output">No speed test run yet.</pre>
+      </section>
+
+      <section class="card">
+        <h2>Sync check</h2>
+        <div class="row">
+          <button id="run-sync">Simulate sync loop</button>
+          <label><input id="sync-rounds" type="number" value="50" min="1" /> rounds</label>
+        </div>
+        <pre id="sync-output">No sync test run yet.</pre>
+      </section>
+    </div>
+
+    <script>
+      const snapshotOutput = document.getElementById("snapshot-output");
+      const speedOutput = document.getElementById("speed-output");
+      const syncOutput = document.getElementById("sync-output");
+      let rows = [];
+
+      function nowMs() {
+        return performance.now();
+      }
+
+      function formatMs(value) {
+        return `${value.toFixed(2)}ms`;
+      }
+
+      function randomRow(id) {
+        return {
+          id,
+          created_at: new Date(Date.now() - Math.random() * 1_000_000_000).toISOString(),
+          value: Math.random().toString(36).slice(2),
+        };
+      }
+
+      document.getElementById("load-file").addEventListener("click", async () => {
+        const input = document.getElementById("snapshot-file");
+        const file = input.files[0];
+        if (!file) {
+          snapshotOutput.textContent = "Choose a file first.";
+          return;
+        }
+        try {
+          const raw = await file.text();
+          const parsed = JSON.parse(raw);
+          rows = Array.isArray(parsed) ? parsed : (parsed?.items || []);
+          snapshotOutput.textContent = `Loaded rows: ${rows.length}\n\nFirst: ${JSON.stringify(rows[0] || null, null, 2)}`;
+        } catch (error) {
+          snapshotOutput.textContent = `Failed to load snapshot: ${error}`;
+          rows = [];
+        }
+      });
+
+      document.getElementById("clear-data").addEventListener("click", () => {
+        rows = [];
+        snapshotOutput.textContent = "Data cleared.";
+      });
+
+      document.getElementById("run-speed").addEventListener("click", () => {
+        const requested = Math.max(100, Number(document.getElementById("row-count").value || 50000));
+        const start = nowMs();
+        const generated = new Array(requested).fill(0).map((_, index) => randomRow(index + 1));
+        const encoded = JSON.stringify(generated);
+        const parsed = JSON.parse(encoded);
+        const sortTime = (() => {
+          const s = nowMs();
+          const sorted = [...parsed].sort((a, b) => a.id - b.id);
+          return nowMs() - s;
+        })();
+        const totalMs = nowMs() - start;
+        rows = parsed;
+        speedOutput.textContent =
+          `Generated: ${generated.length}\n` +
+          `Serialize+parse: ${formatMs(totalMs)}\n` +
+          `Sort: ${formatMs(sortTime)}\n` +
+          `Last id: ${rows[rows.length - 1]?.id}`;
+      });
+
+      document.getElementById("run-sync").addEventListener("click", async () => {
+        const rounds = Math.max(1, Number(document.getElementById("sync-rounds").value || 50));
+        const source = rows.length ? rows : Array.from({ length: 1000 }, (_, i) => randomRow(i + 1));
+        const started = nowMs();
+        let synced = 0;
+        let writes = 0;
+        for (let i = 0; i < rounds; i++) {
+          const checksum = source.reduce((acc, row) => acc + row.id + row.value.length, 0);
+          synced += checksum % 7;
+          writes += source.length;
+          await Promise.resolve();
+        }
+        const elapsed = nowMs() - started;
+        syncOutput.textContent = `Rounds: ${rounds}\n` +
+          `Rows touched: ${writes}\n` +
+          `Checksum sample: ${synced}\n` +
+          `Duration: ${formatMs(elapsed)}\n` +
+          `Avg per round: ${formatMs(elapsed / rounds)}`;
+      });
+    </script>
+  </body>
+</html>

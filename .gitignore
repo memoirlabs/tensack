@@ -1,0 +1,28 @@
+# Rust build artifacts
+/target/
+**/target/
+
+# Local Tensack runtime data
+/.tensack/
+**/.tensack/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.orig
+
+# Coverage and profiling outputs
+*.profraw
+*.profdata
+coverage/
+lcov.info
+
+# OS/editor files
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/

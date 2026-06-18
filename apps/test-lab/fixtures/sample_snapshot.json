@@ -1,0 +1,11 @@
+{
+  "metadata": {
+    "version": "0.0.0",
+    "description": "demo snapshot"
+  },
+  "items": [
+    {"id": "a", "status": "ok", "score": 88},
+    {"id": "b", "status": "warn", "score": 52},
+    {"id": "c", "status": "ok", "score": 99}
+  ]
+}

@@ -1,0 +1,31 @@
+schema! {
+    users {
+        id id
+        name text
+        email text
+        is_ai_user bool
+
+        lookup email unique
+    }
+
+    conversations {
+        id id
+        owner_id id
+        title text
+        created_at int
+
+        lookup owner_id
+        lookup created_at
+    }
+
+    messages {
+        id id
+        conversation_id id
+        sender_id id
+        body text
+        created_at int
+
+        lookup conversation_id
+        lookup created_at
+    }
+}
