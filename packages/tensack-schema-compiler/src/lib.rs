@@ -7,7 +7,9 @@
 
 use std::collections::HashSet;
 use std::fmt;
-use tensack_core::{PrimitiveType, rust_type_name};
+use tensack_core::{
+    DatabaseSchema, PrimitiveType, SchemaError as CoreSchemaError, TableSchema, rust_type_name,
+};
 
 const SCHEMA_VERSION: u32 = 1;
 
@@ -212,9 +214,27 @@ pub fn validate_schema(ir: &SchemaIr) -> Result<(), SchemaError> {
     Ok(())
 }
 
+/// Converts a compiled schema IR into the runtime database schema model.
+pub fn database_schema_from_ir(ir: &SchemaIr) -> Result<DatabaseSchema, CoreSchemaError> {
+    let mut schema = DatabaseSchema::new();
+    for table_ir in &ir.tables {
+        let mut table = TableSchema::new(&table_ir.name);
+        for field in &table_ir.fields {
+            table.add_field(&field.name, field.ty)?;
+        }
+        for lookup in &table_ir.lookups {
+            table.add_lookup(&lookup.field_name, lookup.unique)?;
+        }
+        schema.add_table(table)?;
+    }
+    Ok(schema)
+}
+
 /// Emits a minimal generated Rust schema module as raw source.
 ///
-/// This is intentionally tiny and compiler-oriented.
+/// This is intentionally tiny and compiler-oriented, but it is useful as a
+/// basic Rust SDK: each table gets a typed row, record conversions, CRUD
+/// wrappers, and lookup helpers.
 pub fn emit_raw_rust(ir: &SchemaIr) -> String {
     let mut out = String::new();
     out.push_str("pub mod tensack_generated_schema {\n");
@@ -239,11 +259,48 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
             ));
         }
         out.push_str("        }\n");
-        out.push_str("\n        pub fn table_schema() -> tensack_core::TableSchema {\n");
-        out.push_str("            let mut table = tensack_core::TableSchema::new(NAME);\n");
+        out.push_str("\n        impl Row {\n");
+        out.push_str(
+            "            pub fn into_record(self) -> Result<tensack::Record, tensack::SchemaError> {\n",
+        );
+        out.push_str("                let mut record = tensack::Record::new(NAME);\n");
+        for field in &table.fields {
+            if field.name == "id" {
+                out.push_str("                record.insert_id(self.id);\n");
+            } else {
+                out.push_str(&format!(
+                    "                record.insert_field(\"{}\", {})?;\n",
+                    field.name,
+                    rust_record_value_expr(field)
+                ));
+            }
+        }
+        out.push_str("                Ok(record)\n");
+        out.push_str("            }\n\n");
+        out.push_str(
+            "            pub fn from_record(record: &tensack::Record) -> Result<Self, tensack::SchemaError> {\n",
+        );
+        out.push_str("                if record.table() != NAME {\n");
+        out.push_str(
+            "                    return Err(tensack::SchemaError::UnknownTable(record.table().to_owned()));\n",
+        );
+        out.push_str("                }\n");
+        out.push_str("                Ok(Self {\n");
         for field in &table.fields {
             out.push_str(&format!(
-                "            table.add_field(\"{}\", tensack_core::PrimitiveType::{:?}).unwrap();\n",
+                "                    {}: {},\n",
+                field.name,
+                rust_record_extract_expr(field)
+            ));
+        }
+        out.push_str("                })\n");
+        out.push_str("            }\n");
+        out.push_str("        }\n");
+        out.push_str("\n        pub fn table_schema() -> tensack::TableSchema {\n");
+        out.push_str("            let mut table = tensack::TableSchema::new(NAME);\n");
+        for field in &table.fields {
+            out.push_str(&format!(
+                "            table.add_field(\"{}\", tensack::PrimitiveType::{:?}).unwrap();\n",
                 field.name, field.ty
             ));
         }
@@ -255,11 +312,64 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
         }
         out.push_str("            table\n");
         out.push_str("        }\n");
+        out.push_str(
+            "\n        pub fn insert(db: &tensack::TensackDatabase, row: Row) -> Result<tensack::AppendResult, tensack::TensackError> {\n",
+        );
+        out.push_str("            let record = row.into_record()?;\n");
+        out.push_str("            db.insert(&record)\n");
+        out.push_str("        }\n");
+        out.push_str(
+            "\n        pub fn put(db: &tensack::TensackDatabase, row: Row) -> Result<tensack::AppendResult, tensack::TensackError> {\n",
+        );
+        out.push_str("            let record = row.into_record()?;\n");
+        out.push_str("            db.put(&record)\n");
+        out.push_str("        }\n");
+        out.push_str(
+            "\n        pub fn get(db: &tensack::TensackDatabase, id: &str) -> Result<Option<Row>, tensack::TensackError> {\n",
+        );
+        out.push_str("            match db.get(NAME, id)? {\n");
+        out.push_str("                Some(record) => Ok(Some(Row::from_record(&record)?)),\n");
+        out.push_str("                None => Ok(None),\n");
+        out.push_str("            }\n");
+        out.push_str("        }\n");
+        for lookup in &table.lookups {
+            if lookup.unique {
+                out.push_str(&format!(
+                    "\n        pub fn get_by_{}(db: &tensack::TensackDatabase, key: &str) -> Result<Option<Row>, tensack::TensackError> {{\n",
+                    lookup.field_name
+                ));
+                out.push_str(&format!(
+                    "            match db.get_by(NAME, \"{}\", key)? {{\n",
+                    lookup.field_name
+                ));
+                out.push_str(
+                    "                Some(record) => Ok(Some(Row::from_record(&record)?)),\n",
+                );
+                out.push_str("                None => Ok(None),\n");
+                out.push_str("            }\n");
+                out.push_str("        }\n");
+            } else {
+                out.push_str(&format!(
+                    "\n        pub fn get_many_by_{}(db: &tensack::TensackDatabase, key: &str) -> Result<Vec<Row>, tensack::TensackError> {{\n",
+                    lookup.field_name
+                ));
+                out.push_str(&format!(
+                    "            let records = db.get_many_by(NAME, \"{}\", key)?;\n",
+                    lookup.field_name
+                ));
+                out.push_str("            let mut rows = Vec::with_capacity(records.len());\n");
+                out.push_str("            for record in records {\n");
+                out.push_str("                rows.push(Row::from_record(&record)?);\n");
+                out.push_str("            }\n");
+                out.push_str("            Ok(rows)\n");
+                out.push_str("        }\n");
+            }
+        }
         out.push_str("    }\n");
     }
 
-    out.push_str("\n    pub fn database_schema() -> tensack_core::DatabaseSchema {\n");
-    out.push_str("        let mut schema = tensack_core::DatabaseSchema::new();\n");
+    out.push_str("\n    pub fn database_schema() -> tensack::DatabaseSchema {\n");
+    out.push_str("        let mut schema = tensack::DatabaseSchema::new();\n");
     for table in &ir.tables {
         out.push_str(&format!(
             "        schema.add_table({}::table_schema()).unwrap();\n",
@@ -270,6 +380,48 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
     out.push_str("    }\n");
     out.push_str("}\n");
     out
+}
+
+fn rust_record_value_expr(field: &FieldIr) -> String {
+    match field.ty {
+        PrimitiveType::Id => format!("tensack::SackValue::Id(self.{})", field.name),
+        PrimitiveType::Text | PrimitiveType::Int | PrimitiveType::Float | PrimitiveType::Bool => {
+            format!("self.{}", field.name)
+        }
+    }
+}
+
+fn rust_record_extract_expr(field: &FieldIr) -> String {
+    let variant = match field.ty {
+        PrimitiveType::Id => "Id",
+        PrimitiveType::Text => "Text",
+        PrimitiveType::Int => "Int",
+        PrimitiveType::Float => "Float",
+        PrimitiveType::Bool => "Bool",
+    };
+    let value_expr = match field.ty {
+        PrimitiveType::Id | PrimitiveType::Text => "value.clone()",
+        PrimitiveType::Int | PrimitiveType::Float | PrimitiveType::Bool => "*value",
+    };
+    format!(
+        "match record.fields().get(\"{field}\") {{
+                        Some(tensack::SackValue::{variant}(value)) => {value_expr},
+                        Some(value) => return Err(tensack::SchemaError::TypeMismatch {{
+                            table: NAME.to_owned(),
+                            field: \"{field}\".to_owned(),
+                            expected: tensack::PrimitiveType::{expected:?},
+                            found: value.value_type(),
+                        }}),
+                        None => return Err(tensack::SchemaError::MissingField {{
+                            table: NAME.to_owned(),
+                            field: \"{field}\".to_owned(),
+                        }}),
+                    }}",
+        field = field.name,
+        variant = variant,
+        value_expr = value_expr,
+        expected = field.ty
+    )
 }
 
 fn parse_schema(ts: &mut TokenStream) -> Result<SchemaIr, SchemaError> {
@@ -678,6 +830,9 @@ mod tests {
         assert!(code.contains("pub trust_score: f64"));
         assert!(code.contains("pub disabled: bool"));
         assert!(code.contains("pub account_id: String"));
+        assert!(code.contains("pub fn insert(db: &tensack::TensackDatabase, row: Row)"));
+        assert!(code.contains("pub fn get_many_by_account_id"));
+        assert!(code.contains("pub fn get_by_email"));
     }
 
     #[test]
@@ -688,6 +843,8 @@ mod tests {
         assert!(code.contains("pub struct Row"));
         assert!(code.contains("pub id: String"));
         assert!(code.contains("pub email: String"));
+        assert!(code.contains("pub fn into_record(self)"));
+        assert!(code.contains("pub fn from_record(record: &tensack::Record)"));
     }
 
     #[test]

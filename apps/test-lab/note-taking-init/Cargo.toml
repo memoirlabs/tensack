@@ -1,0 +1,17 @@
+[package]
+name = "note-taking-init"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "note-taking-init"
+path = "src/main.rs"
+
+[dependencies]
+tensack.workspace = true
+tensack-schema-compiler.workspace = true
+
+[build-dependencies]
+tensack-schema-compiler.workspace = true

@@ -247,6 +247,11 @@ impl TensackDatabase {
         self
     }
 
+    /// Creates the empty database layout for all tables in the current schema.
+    pub fn init(&self) -> Result<(), TensackError> {
+        self.store.init(&self.schema).map_err(TensackError::from)
+    }
+
     /// Inserts a new row. Fails if the id already exists.
     pub fn insert(&self, record: &Record) -> Result<AppendResult, TensackError> {
         self.schema.validate_record(record)?;
@@ -349,8 +354,11 @@ fn record_id(record: &Record) -> Result<String, TensackError> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tensack_core::PrimitiveType;
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn temp_root() -> PathBuf {
         let mut dir = std::env::temp_dir();
@@ -358,7 +366,11 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        dir.push(format!("tensack-db-{stamp}"));
+        let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        dir.push(format!(
+            "tensack-db-{}-{stamp}-{counter}",
+            std::process::id()
+        ));
         dir
     }
 
@@ -369,6 +381,62 @@ mod tests {
         messages.add_field("body", PrimitiveType::Text).unwrap();
         db.add_table(messages).unwrap();
         db
+    }
+
+    fn note_schema() -> DatabaseSchema {
+        let mut db = DatabaseSchema::new();
+        let mut notebooks = TableSchema::new("notebooks");
+        notebooks.add_field("id", PrimitiveType::Id).unwrap();
+        notebooks.add_field("title", PrimitiveType::Text).unwrap();
+        notebooks
+            .add_field("created_at", PrimitiveType::Int)
+            .unwrap();
+        notebooks.add_lookup("title", false).unwrap();
+        db.add_table(notebooks).unwrap();
+
+        let mut notes = TableSchema::new("notes");
+        notes.add_field("id", PrimitiveType::Id).unwrap();
+        notes.add_field("notebook_id", PrimitiveType::Id).unwrap();
+        notes.add_field("title", PrimitiveType::Text).unwrap();
+        notes.add_field("body", PrimitiveType::Text).unwrap();
+        notes.add_field("updated_at", PrimitiveType::Int).unwrap();
+        notes.add_lookup("notebook_id", false).unwrap();
+        notes.add_lookup("updated_at", false).unwrap();
+        db.add_table(notes).unwrap();
+        db
+    }
+
+    #[test]
+    fn init_creates_empty_note_database_layout() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "notes-db", note_schema());
+
+        db.init().unwrap();
+        let db_dir = root.join("notes-db");
+        assert!(db_dir.join("tensack.toml").exists());
+        assert!(db_dir.join("tables/notebooks/active.ten").exists());
+        assert!(db_dir.join("tables/notes/active.ten").exists());
+        assert!(db_dir.join("engine/notebooks.tenb").exists());
+        assert!(db_dir.join("engine/notes.tenb").exists());
+
+        let notebooks = fs::read_to_string(db_dir.join("tables/notebooks/active.ten")).unwrap();
+        assert!(notebooks.contains("TEN\t1\ttable\tnotebooks\t"));
+        assert!(notebooks.contains("@field\ttitle\ttext\n"));
+        assert!(notebooks.contains("@lookup\tid\tunique\n"));
+        assert!(notebooks.contains("@lookup\ttitle\tmany\n"));
+        assert!(notebooks.ends_with("@data\n"));
+
+        let notes = fs::read_to_string(db_dir.join("tables/notes/active.ten")).unwrap();
+        assert!(notes.contains("@field\tnotebook_id\tid\n"));
+        assert!(notes.contains("@lookup\tnotebook_id\tmany\n"));
+        assert!(notes.ends_with("@data\n"));
+
+        let metadata = fs::read_to_string(db_dir.join("tensack.toml")).unwrap();
+        assert!(metadata.contains("[tables.notebooks]"));
+        assert!(metadata.contains("[tables.notes]"));
+        assert!(metadata.contains("file = \"engine/notebooks.tenb\""));
+        assert!(metadata.contains("file = \"engine/notes.tenb\""));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

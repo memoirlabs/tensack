@@ -1,0 +1,20 @@
+schema! {
+  notebooks {
+    id id
+    title text
+    created_at int
+
+    lookup title
+  }
+
+  notes {
+    id id
+    notebook_id id
+    title text
+    body text
+    updated_at int
+
+    lookup notebook_id
+    lookup updated_at
+  }
+}

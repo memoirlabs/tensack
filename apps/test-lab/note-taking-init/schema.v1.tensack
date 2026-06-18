@@ -1,0 +1,9 @@
+schema! {
+  notebooks {
+    id id
+    title text
+    created_at int
+
+    lookup title
+  }
+}

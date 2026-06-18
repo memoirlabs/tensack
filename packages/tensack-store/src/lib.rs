@@ -180,6 +180,17 @@ impl LocalStore {
         fs::create_dir_all(self.database_dir().join("engine"))
     }
 
+    /// Initializes an empty database layout for every table in the schema.
+    pub fn init(&self, schema: &DatabaseSchema) -> io::Result<()> {
+        self.ensure_workspace_layout()?;
+        let schema_hash = schema.schema_hash();
+        for table in schema.tables().values() {
+            self.ensure_table_layout(table, &schema_hash)?;
+            self.rebuild_tenb(schema, table.name())?;
+        }
+        self.write_metadata(schema, self.next_tx_id()?)
+    }
+
     /// Computes next transaction id from private engine metadata.
     pub fn next_tx_id(&self) -> io::Result<u64> {
         let metadata = self.metadata_path();
@@ -665,8 +676,11 @@ fn format_error_to_io(error: tensack_format::FormatError) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tensack_core::{DatabaseSchema, PrimitiveType};
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn temp_root(name: &str) -> PathBuf {
         let mut dir = std::env::temp_dir();
@@ -674,7 +688,11 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        dir.push(format!("tensack-store-{name}-{stamp}"));
+        let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        dir.push(format!(
+            "tensack-store-{name}-{}-{stamp}-{counter}",
+            std::process::id()
+        ));
         dir
     }
 

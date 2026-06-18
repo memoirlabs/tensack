@@ -28,3 +28,4 @@ Supporting files:
 
 - `fixtures/` for example payloads and test input data.
 - `experiments/` for active short-lived experiment notes.
+- `note-taking-init/` for a compiler/init experiment that builds an empty two-table notes database under `target/test-lab/`.
