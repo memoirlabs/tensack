@@ -24,7 +24,7 @@ The direction is to end up with:
 - `tests/contracts`: executable behavior contracts over public behavior.
 - `tests/snapshots`: reviewed, stable-output regression assets.
 - `docs/file-format.md` and `docs/commands.md`: public-facing user docs.
-- `packaging/install.sh`: local install script once the shell is feature-complete.
+- `user-scripts/install.sh`: local install script once the shell is feature-complete.
 
 ## Current implementation status (important)
 
@@ -37,8 +37,8 @@ Current code now includes:
 - Core behavior includes:
   - minimal schema primitives in `packages/tensack-core`,
   - legacy JSONL event encoding/decoding helpers in `packages/tensack-format`,
-  - append-only `.ten` writes, `tensack.toml`, and placeholder `.btf` files in `packages/tensack-store`,
-  - a composed write API in `packages/tensack`.
+  - append-only `.ten` writes, `tensack.toml`, and generated `.tenb` lookup caches in `packages/tensack-store`,
+  - a composed write/read API in `packages/tensack`.
 - Schema compiler in `packages/tensack-schema-compiler` with:
   - `schema!` parser for importable schema snippets,
   - compile-time validation for naming/lookups/duplicates,
@@ -88,7 +88,7 @@ currently implemented.
 - `apps/test-lab` — broad experiment workspace (UI prototypes + fixtures + speed/sync checks), separate from shipped admin UI.
 - `benchmark` — benchmark definitions.
 - `docs` — current and archive documentation.
-- `packaging` — install script location.
+- `user-scripts` — install script location.
 
 ## Experiment workflow (non-hot-path)
 

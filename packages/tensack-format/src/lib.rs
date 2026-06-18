@@ -15,6 +15,10 @@ use tensack_core::{PrimitiveType, Record, SackValue, TableSchema};
 
 /// File format version recognized by this shell.
 pub const FORMAT_VERSION: u32 = 1;
+pub const TEN_MAGIC: &str = "TEN";
+pub const TEN_PROFILE_TABLE: &str = "table";
+pub const TENB_MAGIC: &str = "TENB";
+pub const TENX_MAGIC: &str = "TENX";
 
 /// Internal operation type in the JSONL append log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,6 +65,8 @@ pub enum FormatError {
     UnsupportedVersion { expected: u32, found: u32 },
     /// A `.ten` row has the wrong column count.
     BadTenColumnCount { expected: usize, found: usize },
+    /// A `.ten` file has an invalid magic/header line.
+    BadTenMagic(String),
     /// A `.ten` row has an invalid transaction id.
     BadTenTx(std::num::ParseIntError),
     /// A `.ten` row has an invalid operation.
@@ -75,6 +81,8 @@ pub enum FormatError {
     BadTenEscape(String),
     /// A `.ten` record could not be built.
     BadTenRecord(String),
+    /// A `.tenb` cache cannot be decoded.
+    BadTenb(String),
 }
 
 impl fmt::Display for FormatError {
@@ -92,6 +100,7 @@ impl fmt::Display for FormatError {
                     ".ten row column count mismatch: expected {expected}, found {found}"
                 )
             }
+            Self::BadTenMagic(line) => write!(formatter, ".ten file has bad magic: {line}"),
             Self::BadTenTx(error) => write!(formatter, ".ten row has invalid tx id: {error}"),
             Self::BadTenOperation(operation) => {
                 write!(formatter, ".ten row has invalid operation: {operation}")
@@ -104,6 +113,7 @@ impl fmt::Display for FormatError {
             }
             Self::BadTenEscape(value) => write!(formatter, ".ten value has bad escape: {value}"),
             Self::BadTenRecord(error) => write!(formatter, ".ten record error: {error}"),
+            Self::BadTenb(error) => write!(formatter, ".tenb cache error: {error}"),
         }
     }
 }
@@ -162,6 +172,39 @@ pub fn encode_ten_header(table: &TableSchema) -> String {
     table.field_order().join("\t")
 }
 
+/// Encodes the self-describing `.ten` preamble for one logical table segment.
+pub fn encode_ten_preamble(table: &TableSchema, schema_hash: &str) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{TEN_MAGIC}\t{FORMAT_VERSION}\t{TEN_PROFILE_TABLE}\t{}\t{schema_hash}\n",
+        escape_ten_value(table.name())
+    ));
+    for field_name in table.field_order() {
+        let field = table
+            .field(field_name)
+            .expect("field order only contains declared fields");
+        out.push_str(&format!(
+            "@field\t{}\t{}\n",
+            escape_ten_value(field.name()),
+            <&'static str>::from(field.kind())
+        ));
+    }
+    for lookup in table.lookup_specs_with_implicit_id() {
+        out.push_str(&format!(
+            "@lookup\t{}\t{}\n",
+            escape_ten_value(lookup.field_name()),
+            if lookup.unique() { "unique" } else { "many" }
+        ));
+    }
+    out.push_str("@data\n");
+    out
+}
+
+/// Returns true when a line is the magic line for the current `.ten` table profile.
+pub fn is_ten_magic_line(line: &str) -> bool {
+    line.starts_with("TEN\t")
+}
+
 /// Encodes one `.ten` data row in schema field order.
 pub fn encode_ten_row(table: &TableSchema, record: &Record) -> Result<String, FormatError> {
     let mut columns = Vec::with_capacity(table.field_order().len());
@@ -173,6 +216,74 @@ pub fn encode_ten_row(table: &TableSchema, record: &Record) -> Result<String, Fo
         columns.push(escape_ten_value(&value_to_string(value)));
     }
     Ok(columns.join("\t"))
+}
+
+/// Encodes one `.ten` operation line.
+pub fn encode_ten_operation(
+    table: &TableSchema,
+    operation: Operation,
+    tx_id: u64,
+    record: &Record,
+) -> Result<String, FormatError> {
+    match operation {
+        Operation::Put => {
+            let row = encode_ten_row(table, record)?;
+            Ok(format!("R\t{tx_id}\t{row}"))
+        }
+        Operation::Delete => {
+            let id = record
+                .fields()
+                .get("id")
+                .ok_or_else(|| FormatError::BadTenRecord("delete missing id".to_owned()))?;
+            Ok(format!(
+                "D\t{tx_id}\t{}",
+                escape_ten_value(&value_to_string(id))
+            ))
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TenOperationRecord {
+    Put { tx_id: u64, record: Record },
+    Delete { tx_id: u64, id: String },
+}
+
+impl TenOperationRecord {
+    pub fn tx_id(&self) -> u64 {
+        match self {
+            Self::Put { tx_id, .. } | Self::Delete { tx_id, .. } => *tx_id,
+        }
+    }
+}
+
+/// Parses one current-profile `.ten` operation line.
+pub fn decode_ten_operation(
+    table: &TableSchema,
+    line: &str,
+) -> Result<TenOperationRecord, FormatError> {
+    let mut fixed = line.splitn(3, '\t');
+    let tag = fixed.next().unwrap_or_default();
+    let tx = fixed.next().ok_or(FormatError::BadTenColumnCount {
+        expected: 3,
+        found: 1,
+    })?;
+    let tail = fixed.next().ok_or(FormatError::BadTenColumnCount {
+        expected: 3,
+        found: 2,
+    })?;
+    let tx_id = tx.parse::<u64>().map_err(FormatError::BadTenTx)?;
+    match tag {
+        "R" => Ok(TenOperationRecord::Put {
+            tx_id,
+            record: decode_ten_row(table, tail)?,
+        }),
+        "D" => Ok(TenOperationRecord::Delete {
+            tx_id,
+            id: unescape_ten_value(tail)?,
+        }),
+        other => Err(FormatError::BadTenOperation(other.to_owned())),
+    }
 }
 
 /// Parses one `.ten` row into a typed record.
@@ -199,6 +310,136 @@ pub fn decode_ten_row(table: &TableSchema, line: &str) -> Result<Record, FormatE
     }
 
     Ok(record)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RowPointer {
+    pub chunk_name: String,
+    pub offset: u64,
+    pub len: u32,
+    pub tx_id: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TenbRowEntry {
+    pub id: String,
+    pub ptr: RowPointer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TenbLookupEntry {
+    pub field_name: String,
+    pub key: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TenbCache {
+    pub version: u32,
+    pub table: String,
+    pub schema_hash: String,
+    pub source_hash: String,
+    pub rows: Vec<TenbRowEntry>,
+    pub lookups: Vec<TenbLookupEntry>,
+}
+
+pub fn source_hash(bytes: &[u8]) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
+pub fn encode_tenb_cache(cache: &TenbCache) -> Vec<u8> {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{TENB_MAGIC}\t{}\t{}\t{}\t{}\n",
+        cache.version,
+        escape_ten_value(&cache.table),
+        escape_ten_value(&cache.schema_hash),
+        escape_ten_value(&cache.source_hash)
+    ));
+    for row in &cache.rows {
+        out.push_str(&format!(
+            "row\t{}\t{}\t{}\t{}\t{}\n",
+            escape_ten_value(&row.id),
+            escape_ten_value(&row.ptr.chunk_name),
+            row.ptr.offset,
+            row.ptr.len,
+            row.ptr.tx_id
+        ));
+    }
+    for lookup in &cache.lookups {
+        out.push_str(&format!(
+            "lookup\t{}\t{}\t{}\n",
+            escape_ten_value(&lookup.field_name),
+            escape_ten_value(&lookup.key),
+            escape_ten_value(&lookup.id)
+        ));
+    }
+    out.into_bytes()
+}
+
+pub fn decode_tenb_cache(bytes: &[u8]) -> Result<TenbCache, FormatError> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|error| FormatError::BadTenb(format!("invalid utf-8: {error}")))?;
+    let mut lines = text.lines();
+    let header = lines
+        .next()
+        .ok_or_else(|| FormatError::BadTenb("missing header".to_owned()))?;
+    let header_parts: Vec<_> = header.split('\t').collect();
+    if header_parts.len() != 5 || header_parts[0] != TENB_MAGIC {
+        return Err(FormatError::BadTenb("bad TENB header".to_owned()));
+    }
+    let version = header_parts[1]
+        .parse::<u32>()
+        .map_err(|error| FormatError::BadTenb(format!("bad version: {error}")))?;
+    let mut cache = TenbCache {
+        version,
+        table: unescape_ten_value(header_parts[2])?,
+        schema_hash: unescape_ten_value(header_parts[3])?,
+        source_hash: unescape_ten_value(header_parts[4])?,
+        rows: Vec::new(),
+        lookups: Vec::new(),
+    };
+
+    for line in lines {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parts: Vec<_> = line.split('\t').collect();
+        match parts.first().copied() {
+            Some("row") if parts.len() == 6 => {
+                cache.rows.push(TenbRowEntry {
+                    id: unescape_ten_value(parts[1])?,
+                    ptr: RowPointer {
+                        chunk_name: unescape_ten_value(parts[2])?,
+                        offset: parts[3].parse::<u64>().map_err(|error| {
+                            FormatError::BadTenb(format!("bad row offset: {error}"))
+                        })?,
+                        len: parts[4].parse::<u32>().map_err(|error| {
+                            FormatError::BadTenb(format!("bad row len: {error}"))
+                        })?,
+                        tx_id: parts[5].parse::<u64>().map_err(|error| {
+                            FormatError::BadTenb(format!("bad row tx: {error}"))
+                        })?,
+                    },
+                });
+            }
+            Some("lookup") if parts.len() == 4 => {
+                cache.lookups.push(TenbLookupEntry {
+                    field_name: unescape_ten_value(parts[1])?,
+                    key: unescape_ten_value(parts[2])?,
+                    id: unescape_ten_value(parts[3])?,
+                });
+            }
+            _ => return Err(FormatError::BadTenb(format!("bad entry: {line}"))),
+        }
+    }
+
+    Ok(cache)
 }
 
 /// Escapes one `.ten` field value.

@@ -20,7 +20,7 @@ This is the consolidated map of public design/specification documents and how th
 
 ## Design and architecture specs
 
-- [tensack_rust_backend_architecture.md](../tensack_rust_backend_architecture.md) — full architecture/spec for readable `.ten` row segments, rebuildable `.btf` indexes, `tensack.toml` metadata, and generated registry direction.
+- [tensack_rust_backend_architecture.md](../tensack_rust_backend_architecture.md) — full architecture/spec for readable `.ten` row segments, rebuildable lookup indexes, `tensack.toml` metadata, and generated registry direction.
 - [tensack_functional_addendum.md](../tensack_functional_addendum.md) — functional interface addendum to the architecture.
 
 ## Duplicate / overlap notes
@@ -31,5 +31,5 @@ This is the consolidated map of public design/specification documents and how th
 ## Direct comparison: current vs spec
 
 - Implemented status today: command-surface shell (`--version`, `help`) and package-level boundaries; a schema compiler crate is now present, while registry generation and full runtime behavior are still pending.
-- Most spec items currently not present: generated registries, `.ten` row segments, `.btf` lookup/index runtime behavior, `tensack.toml` metadata, read/change plans, compaction, repair, inspect, and SDK surface.
+- Most spec items currently not present: full generated registries, binary-packed `.tenb` layout, `.tenx` search, read/change plans, compaction, repair, inspect, and SDK surface.
 - The root package layout and boundaries are aligned with the architecture direction but not yet functionally complete.

@@ -7,7 +7,8 @@
 use std::path::{Path, PathBuf};
 
 pub use tensack_core::{
-    DatabaseSchema, FieldSpec, PrimitiveType, Record, SchemaError, TableSchema, Workspace,
+    DatabaseSchema, FieldSpec, PrimitiveType, Record, SackValue, SchemaError, TableSchema,
+    Workspace,
 };
 pub use tensack_format::Operation;
 pub use tensack_store::{AppendResult, LocalStore};
@@ -246,7 +247,15 @@ impl TensackDatabase {
         self
     }
 
-    /// Writes a put operation to the database.
+    /// Inserts a new row. Fails if the id already exists.
+    pub fn insert(&self, record: &Record) -> Result<AppendResult, TensackError> {
+        self.schema.validate_record(record)?;
+        self.store
+            .append_insert(&self.schema, record)
+            .map_err(TensackError::from)
+    }
+
+    /// Writes a replacement row, or inserts it if it does not exist.
     pub fn put(&self, record: &Record) -> Result<AppendResult, TensackError> {
         self.schema.validate_record(record)?;
         self.store
@@ -254,11 +263,16 @@ impl TensackDatabase {
             .map_err(TensackError::from)
     }
 
-    /// Writes a delete operation to the database.
+    /// Writes a delete operation using the id from a row-like record.
     pub fn delete(&self, record: &Record) -> Result<AppendResult, TensackError> {
-        self.schema.validate_record(record)?;
+        let id = record_id(record)?;
+        self.delete_by_id(record.table(), &id)
+    }
+
+    /// Deletes a row by id. This does not require the rest of the row fields.
+    pub fn delete_by_id(&self, table_name: &str, id: &str) -> Result<AppendResult, TensackError> {
         self.store
-            .append_delete(&self.schema, record)
+            .append_delete_id(&self.schema, table_name, id)
             .map_err(TensackError::from)
     }
 
@@ -272,6 +286,62 @@ impl TensackDatabase {
         self.store
             .append(&self.schema, operation, record)
             .map_err(TensackError::from)
+    }
+
+    /// Reads the current live row for a table id.
+    pub fn get(&self, table_name: &str, id: &str) -> Result<Option<Record>, TensackError> {
+        self.store
+            .get_by_id(&self.schema, table_name, id)
+            .map_err(TensackError::from)
+    }
+
+    /// Reads the first current live row matching a lookup key.
+    pub fn get_by(
+        &self,
+        table_name: &str,
+        lookup_field: &str,
+        key: &str,
+    ) -> Result<Option<Record>, TensackError> {
+        Ok(self
+            .store
+            .get_by_lookup(&self.schema, table_name, lookup_field, key)
+            .map_err(TensackError::from)?
+            .into_iter()
+            .next())
+    }
+
+    /// Reads all current live rows matching a lookup key.
+    pub fn get_many_by(
+        &self,
+        table_name: &str,
+        lookup_field: &str,
+        key: &str,
+    ) -> Result<Vec<Record>, TensackError> {
+        self.store
+            .get_by_lookup(&self.schema, table_name, lookup_field, key)
+            .map_err(TensackError::from)
+    }
+
+    /// Rebuilds the generated `.tenb` cache for one table from canonical `.ten`.
+    pub fn rebuild_cache(&self, table_name: &str) -> Result<(), TensackError> {
+        self.store
+            .rebuild_tenb(&self.schema, table_name)
+            .map(|_| ())
+            .map_err(TensackError::from)
+    }
+}
+
+fn record_id(record: &Record) -> Result<String, TensackError> {
+    match record.fields().get("id") {
+        Some(SackValue::Id(value)) | Some(SackValue::Text(value)) => Ok(value.clone()),
+        Some(value) => Err(TensackError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("record id must be id/text, got {}", value.value_type()),
+        ))),
+        None => Err(TensackError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "record missing id",
+        ))),
     }
 }
 
@@ -324,7 +394,181 @@ mod tests {
         let db_dir = root.join("chat");
         assert!(db_dir.join("tables/messages/active.ten").exists());
         assert!(db_dir.join("tensack.toml").exists());
-        assert!(db_dir.join("engine/messages.btf").exists());
+        assert!(db_dir.join("engine/messages.tenb").exists());
+        let active = fs::read_to_string(db_dir.join("tables/messages/active.ten")).unwrap();
+        assert!(active.starts_with("TEN\t1\ttable\tmessages\t"));
+        assert!(active.contains("R\t1\tm1\thello\n"));
+        assert!(active.contains("R\t2\tm2\tworld\n"));
+        assert_eq!(
+            db.get("messages", "m1")
+                .unwrap()
+                .unwrap()
+                .fields()
+                .get("body"),
+            first.fields().get("body")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn insert_fails_when_id_already_exists() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
+        let row = Record::new("messages")
+            .with_id("m1")
+            .unwrap()
+            .with_field("body", "hello")
+            .unwrap();
+
+        db.insert(&row).unwrap();
+        assert!(db.insert(&row).is_err());
+        let rows = db
+            .store
+            .read_table(db.schema(), "messages")
+            .expect("read table");
+        assert_eq!(rows.len(), 1);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn put_replaces_existing_row() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
+        let first = Record::new("messages")
+            .with_id("m1")
+            .unwrap()
+            .with_field("body", "hello")
+            .unwrap();
+        let second = Record::new("messages")
+            .with_id("m1")
+            .unwrap()
+            .with_field("body", "updated")
+            .unwrap();
+
+        db.insert(&first).unwrap();
+        db.put(&second).unwrap();
+        assert_eq!(
+            db.get("messages", "m1")
+                .unwrap()
+                .unwrap()
+                .fields()
+                .get("body"),
+            second.fields().get("body")
+        );
+        let rows = db
+            .store
+            .read_table(db.schema(), "messages")
+            .expect("read table");
+        assert_eq!(rows.len(), 1);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn get_by_lookup_uses_generated_tenb_cache() {
+        let root = temp_root();
+        let mut schema = DatabaseSchema::new();
+        let mut messages = TableSchema::new("messages");
+        messages.add_field("id", PrimitiveType::Id).unwrap();
+        messages
+            .add_field("conversation_id", PrimitiveType::Id)
+            .unwrap();
+        messages.add_field("body", PrimitiveType::Text).unwrap();
+        messages.add_lookup("conversation_id", false).unwrap();
+        schema.add_table(messages).unwrap();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema);
+
+        let first = Record::new("messages")
+            .with_id("m1")
+            .unwrap()
+            .with_field(
+                "conversation_id",
+                tensack_core::SackValue::Id("cv1".to_owned()),
+            )
+            .unwrap()
+            .with_field("body", "hello")
+            .unwrap();
+        let second = Record::new("messages")
+            .with_id("m2")
+            .unwrap()
+            .with_field(
+                "conversation_id",
+                tensack_core::SackValue::Id("cv1".to_owned()),
+            )
+            .unwrap()
+            .with_field("body", "world")
+            .unwrap();
+
+        db.put(&first).unwrap();
+        db.put(&second).unwrap();
+        let rows = db
+            .get_many_by("messages", "conversation_id", "cv1")
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+
+        fs::remove_file(root.join("chat/engine/messages.tenb")).unwrap();
+        assert_eq!(
+            db.get("messages", "m2")
+                .unwrap()
+                .unwrap()
+                .fields()
+                .get("body"),
+            second.fields().get("body")
+        );
+        assert!(root.join("chat/engine/messages.tenb").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn delete_removes_live_row_from_tenb_cache() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
+        let row = Record::new("messages")
+            .with_id("m1")
+            .unwrap()
+            .with_field("body", "hello")
+            .unwrap();
+
+        db.put(&row).unwrap();
+        assert!(db.get("messages", "m1").unwrap().is_some());
+        db.delete_by_id("messages", "m1").unwrap();
+        assert!(db.get("messages", "m1").unwrap().is_none());
+
+        let active = fs::read_to_string(root.join("chat/tables/messages/active.ten")).unwrap();
+        assert!(active.contains("D\t2\tm1\n"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn unique_lookup_conflicts_fail_before_append() {
+        let root = temp_root();
+        let mut schema = DatabaseSchema::new();
+        let mut users = TableSchema::new("users");
+        users.add_field("id", PrimitiveType::Id).unwrap();
+        users.add_field("email", PrimitiveType::Text).unwrap();
+        users.add_field("name", PrimitiveType::Text).unwrap();
+        users.add_lookup("email", true).unwrap();
+        schema.add_table(users).unwrap();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema);
+
+        let first = Record::new("users")
+            .with_id("u1")
+            .unwrap()
+            .with_field("email", "same@test.com")
+            .unwrap()
+            .with_field("name", "Ada")
+            .unwrap();
+        let second = Record::new("users")
+            .with_id("u2")
+            .unwrap()
+            .with_field("email", "same@test.com")
+            .unwrap()
+            .with_field("name", "Ben")
+            .unwrap();
+
+        db.insert(&first).unwrap();
+        assert!(db.insert(&second).is_err());
+        let active = fs::read_to_string(root.join("chat/tables/users/active.ten")).unwrap();
+        assert!(!active.contains("u2\tsame@test.com"));
         let _ = fs::remove_dir_all(root);
     }
 

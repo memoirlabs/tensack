@@ -28,7 +28,7 @@ The root workspace currently contains:
 
 The current storage path opens a database at a caller-provided path, creates
 directories such as `tables/` and `engine/`, writes `tensack.toml`, appends table
-rows to `.ten` files, and writes rebuildable `.btf` lookup/index placeholders.
+rows to `.ten` files, and writes rebuildable `.tenb` lookup/index caches.
 
 ## Mental Model
 

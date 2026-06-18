@@ -22,16 +22,22 @@ The database is composed in `packages/tensack`. CLI behavior lives in `packages/
 - `tests/contracts` - public behavior contracts for CLI, format, and storage boundaries.
 - `tests/snapshots` - reviewed output snapshots for command and format surfaces.
 - `docs` - user-facing format and command documentation.
-- `packaging` - local installation scripts.
+- `user-scripts` - local installation scripts.
 - [project spec/doc map](docs/project-specs.md) - public spec and implementation reference documents gathered in one place.
 
 ## Status
 
 The workspace now includes a minimal writable data path: schema-validated rows
 are encoded into per-table `.ten` row segments, with a root `tensack.toml`
-physical layout map and placeholder `.btf` files for future indexes/lookups.
+physical layout map and generated `.tenb` caches for id and declared lookup
+reads. `.tenx` is reserved for optional full-text search and is not required for
+normal reads.
 
-### Minimal write example
+The current product target is intentionally plain: a tiny local table database
+with CRUD, typed primitive fields, and rebuildable lookup caches. No SQL, no
+chat-specific primary surface, no external database.
+
+### Minimal CRUD example
 
 ```rust
 use tensack::{
@@ -51,6 +57,16 @@ let row = Record::new("messages")
     .with_field("body", "hello")
     .unwrap();
 
-let append = db.put(&row).unwrap();
-println!("appended tx {}", append.tx_id);
+db.insert(&row).unwrap();
+
+let found = db.get("messages", "m1").unwrap();
+assert!(found.is_some());
+
+let replacement = Record::new("messages")
+    .with_id("m1")
+    .unwrap()
+    .with_field("body", "updated")
+    .unwrap();
+db.put(&replacement).unwrap();
+db.delete_by_id("messages", "m1").unwrap();
 ```

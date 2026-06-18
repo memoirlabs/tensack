@@ -100,6 +100,38 @@ impl TableSchema {
     pub fn lookups(&self) -> &BTreeMap<String, LookupSpec> {
         &self.lookups
     }
+
+    pub fn lookup_specs_with_implicit_id(&self) -> Vec<LookupSpec> {
+        let mut lookups = Vec::with_capacity(self.lookups.len() + 1);
+        lookups.push(LookupSpec {
+            field_name: "id".to_owned(),
+            unique: true,
+        });
+        lookups.extend(self.lookups.values().cloned());
+        lookups
+    }
+
+    pub fn signature(&self) -> String {
+        let mut out = String::new();
+        out.push_str(self.name());
+        for field_name in &self.field_order {
+            let field = self
+                .field(field_name)
+                .expect("field order only contains declared fields");
+            out.push('|');
+            out.push_str(field.name());
+            out.push(':');
+            out.push_str(<&'static str>::from(field.kind()));
+        }
+        for lookup in self.lookup_specs_with_implicit_id() {
+            out.push('|');
+            out.push_str("lookup:");
+            out.push_str(lookup.field_name());
+            out.push(':');
+            out.push_str(if lookup.unique() { "unique" } else { "many" });
+        }
+        out
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -193,6 +225,15 @@ impl DatabaseSchema {
             });
         }
 
+        for field_name in table.field_order() {
+            if !record.fields().contains_key(field_name) {
+                return Err(SchemaError::MissingField {
+                    table: table.name().to_owned(),
+                    field: field_name.to_owned(),
+                });
+            }
+        }
+
         for (name, value) in record.fields() {
             let field = table.field(name).ok_or_else(|| SchemaError::UnknownField {
                 table: table.name().to_owned(),
@@ -209,5 +250,18 @@ impl DatabaseSchema {
         }
 
         Ok(())
+    }
+
+    pub fn schema_hash(&self) -> String {
+        let mut hash = 0xcbf29ce484222325u64;
+        for table in self.tables.values() {
+            for byte in table.signature().as_bytes() {
+                hash ^= u64::from(*byte);
+                hash = hash.wrapping_mul(0x100000001b3);
+            }
+            hash ^= b'\n' as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        format!("{hash:016x}")
     }
 }

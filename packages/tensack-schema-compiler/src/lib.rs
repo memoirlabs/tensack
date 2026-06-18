@@ -17,11 +17,48 @@ pub struct SchemaIr {
     pub tables: Vec<TableIr>,
 }
 
+impl SchemaIr {
+    pub fn schema_hash(&self) -> String {
+        let mut hash = 0xcbf29ce484222325u64;
+        for table in &self.tables {
+            for byte in table.signature().as_bytes() {
+                hash ^= u64::from(*byte);
+                hash = hash.wrapping_mul(0x100000001b3);
+            }
+            hash ^= b'\n' as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        format!("{hash:016x}")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TableIr {
     pub name: String,
     pub fields: Vec<FieldIr>,
     pub lookups: Vec<LookupIr>,
+}
+
+impl TableIr {
+    fn signature(&self) -> String {
+        let mut out = String::new();
+        out.push_str(&self.name);
+        for field in &self.fields {
+            out.push('|');
+            out.push_str(&field.name);
+            out.push(':');
+            out.push_str(<&'static str>::from(field.ty));
+        }
+        out.push_str("|lookup:id:unique");
+        for lookup in &self.lookups {
+            out.push('|');
+            out.push_str("lookup:");
+            out.push_str(&lookup.field_name);
+            out.push(':');
+            out.push_str(if lookup.unique { "unique" } else { "many" });
+        }
+        out
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -181,9 +218,17 @@ pub fn validate_schema(ir: &SchemaIr) -> Result<(), SchemaError> {
 pub fn emit_raw_rust(ir: &SchemaIr) -> String {
     let mut out = String::new();
     out.push_str("pub mod tensack_generated_schema {\n");
+    out.push_str(&format!(
+        "    pub const SCHEMA_HASH: &str = \"{}\";\n\n",
+        ir.schema_hash()
+    ));
 
     for table in &ir.tables {
         out.push_str(&format!("    pub mod {} {{\n", table.name));
+        out.push_str(&format!(
+            "        pub const NAME: &str = \"{}\";\n",
+            table.name
+        ));
         out.push_str("        #[derive(Debug, Clone, PartialEq)]\n");
         out.push_str("        pub struct Row {\n");
         for field in &table.fields {
@@ -194,9 +239,35 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
             ));
         }
         out.push_str("        }\n");
+        out.push_str("\n        pub fn table_schema() -> tensack_core::TableSchema {\n");
+        out.push_str("            let mut table = tensack_core::TableSchema::new(NAME);\n");
+        for field in &table.fields {
+            out.push_str(&format!(
+                "            table.add_field(\"{}\", tensack_core::PrimitiveType::{:?}).unwrap();\n",
+                field.name, field.ty
+            ));
+        }
+        for lookup in &table.lookups {
+            out.push_str(&format!(
+                "            table.add_lookup(\"{}\", {}).unwrap();\n",
+                lookup.field_name, lookup.unique
+            ));
+        }
+        out.push_str("            table\n");
+        out.push_str("        }\n");
         out.push_str("    }\n");
     }
 
+    out.push_str("\n    pub fn database_schema() -> tensack_core::DatabaseSchema {\n");
+    out.push_str("        let mut schema = tensack_core::DatabaseSchema::new();\n");
+    for table in &ir.tables {
+        out.push_str(&format!(
+            "        schema.add_table({}::table_schema()).unwrap();\n",
+            table.name
+        ));
+    }
+    out.push_str("        schema\n");
+    out.push_str("    }\n");
     out.push_str("}\n");
     out
 }
