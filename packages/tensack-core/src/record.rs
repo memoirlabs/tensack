@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
 use crate::error::{SchemaError, ensure_public_field_name};
-use crate::value::SackValue;
+use crate::value::Value;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
     table: String,
-    fields: BTreeMap<String, SackValue>,
+    fields: BTreeMap<String, Value>,
 }
 
 impl Record {
@@ -21,18 +21,18 @@ impl Record {
         &self.table
     }
 
-    pub fn fields(&self) -> &BTreeMap<String, SackValue> {
+    pub fn fields(&self) -> &BTreeMap<String, Value> {
         &self.fields
     }
 
-    pub fn fields_mut(&mut self) -> &mut BTreeMap<String, SackValue> {
+    pub fn fields_mut(&mut self) -> &mut BTreeMap<String, Value> {
         &mut self.fields
     }
 
     pub fn with_field(
         mut self,
         name: impl Into<String>,
-        value: impl Into<SackValue>,
+        value: impl Into<Value>,
     ) -> Result<Self, SchemaError> {
         let name = name.into();
         ensure_public_field_name(&name)?;
@@ -41,15 +41,14 @@ impl Record {
     }
 
     pub fn with_id(mut self, id: impl Into<String>) -> Result<Self, SchemaError> {
-        self.fields
-            .insert("id".to_owned(), SackValue::Id(id.into()));
+        self.fields.insert("id".to_owned(), Value::Id(id.into()));
         Ok(self)
     }
 
     pub fn insert_field(
         &mut self,
         name: impl Into<String>,
-        value: impl Into<SackValue>,
+        value: impl Into<Value>,
     ) -> Result<(), SchemaError> {
         let name = name.into();
         ensure_public_field_name(&name)?;
@@ -58,7 +57,6 @@ impl Record {
     }
 
     pub fn insert_id(&mut self, id: impl Into<String>) {
-        self.fields
-            .insert("id".to_owned(), SackValue::Id(id.into()));
+        self.fields.insert("id".to_owned(), Value::Id(id.into()));
     }
 }

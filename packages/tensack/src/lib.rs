@@ -8,8 +8,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub use tensack_core::{
-    DatabaseSchema, FieldSpec, PrimitiveType, Record, SackValue, SchemaError, TableSchema,
-    Workspace,
+    DatabaseSchema, FieldSpec, PrimitiveType, Record, SchemaError, TableSchema, Value, Workspace,
 };
 pub use tensack_format::Operation;
 pub use tensack_store::{AppendResult, LocalStore};
@@ -227,8 +226,8 @@ pub struct PlanEnvelope {
     pub op: PlanOp,
     pub table: String,
     pub lookup: Option<String>,
-    pub key: BTreeMap<String, SackValue>,
-    pub value: BTreeMap<String, SackValue>,
+    pub key: BTreeMap<String, Value>,
+    pub value: BTreeMap<String, Value>,
     pub limit: Option<usize>,
     pub cursor: Option<String>,
 }
@@ -251,12 +250,12 @@ impl PlanEnvelope {
         self
     }
 
-    pub fn with_key(mut self, name: impl Into<String>, value: impl Into<SackValue>) -> Self {
+    pub fn with_key(mut self, name: impl Into<String>, value: impl Into<Value>) -> Self {
         self.key.insert(name.into(), value.into());
         self
     }
 
-    pub fn with_value(mut self, name: impl Into<String>, value: impl Into<SackValue>) -> Self {
+    pub fn with_value(mut self, name: impl Into<String>, value: impl Into<Value>) -> Self {
         self.value.insert(name.into(), value.into());
         self
     }
@@ -423,7 +422,7 @@ impl TensackDatabase {
         match self.execute_plan(
             PlanEnvelope::new(PlanOp::Get, table_name)
                 .with_lookup("id")
-                .with_key("id", SackValue::Id(id.to_owned())),
+                .with_key("id", Value::Id(id.to_owned())),
         )? {
             PlanOutcome::Row(row) => Ok(row),
             _ => unreachable!("get plans return row results"),
@@ -440,7 +439,7 @@ impl TensackDatabase {
         match self.execute_plan(
             PlanEnvelope::new(PlanOp::Get, table_name)
                 .with_lookup(lookup_field)
-                .with_key(lookup_field, SackValue::Text(key.to_owned())),
+                .with_key(lookup_field, Value::Text(key.to_owned())),
         )? {
             PlanOutcome::Row(row) => Ok(row),
             _ => unreachable!("get plans return row results"),
@@ -457,7 +456,7 @@ impl TensackDatabase {
         match self.execute_plan(
             PlanEnvelope::new(PlanOp::Find, table_name)
                 .with_lookup(lookup_field)
-                .with_key(lookup_field, SackValue::Text(key.to_owned()))
+                .with_key(lookup_field, Value::Text(key.to_owned()))
                 .with_limit(MAX_PLAN_LIMIT),
         )? {
             PlanOutcome::Rows(page) => Ok(page.rows),
@@ -470,13 +469,13 @@ impl TensackDatabase {
         &self,
         table_name: &str,
         id: &str,
-        patch: BTreeMap<String, SackValue>,
+        patch: BTreeMap<String, Value>,
     ) -> Result<AppendResult, TensackError> {
         match self.execute_plan(PlanEnvelope {
             op: PlanOp::Patch,
             table: table_name.to_owned(),
             lookup: Some("id".to_owned()),
-            key: BTreeMap::from([("id".to_owned(), SackValue::Id(id.to_owned()))]),
+            key: BTreeMap::from([("id".to_owned(), Value::Id(id.to_owned()))]),
             value: patch,
             limit: None,
             cursor: None,
@@ -624,7 +623,7 @@ impl TensackDatabase {
     fn record_from_plan_value(
         &self,
         table_name: &str,
-        value: &BTreeMap<String, SackValue>,
+        value: &BTreeMap<String, Value>,
     ) -> Result<Record, TensackError> {
         let mut record = Record::new(table_name);
         for (name, value) in value {
@@ -725,18 +724,18 @@ fn next_cursor(offset: usize, limit: usize, total: usize) -> Option<String> {
     (next < total).then(|| next.to_string())
 }
 
-fn value_to_lookup_key(value: &SackValue) -> String {
+fn value_to_lookup_key(value: &Value) -> String {
     match value {
-        SackValue::Id(value) | SackValue::Text(value) => value.clone(),
-        SackValue::Int(value) => value.to_string(),
-        SackValue::Float(value) => value.to_string(),
-        SackValue::Bool(value) => value.to_string(),
+        Value::Id(value) | Value::Text(value) => value.clone(),
+        Value::Int(value) => value.to_string(),
+        Value::Float(value) => value.to_string(),
+        Value::Bool(value) => value.to_string(),
     }
 }
 
 fn record_id(record: &Record) -> Result<String, TensackError> {
     match record.fields().get("id") {
-        Some(SackValue::Id(value)) | Some(SackValue::Text(value)) => Ok(value.clone()),
+        Some(Value::Id(value)) | Some(Value::Text(value)) => Ok(value.clone()),
         Some(value) => Err(TensackError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!("record id must be id/text, got {}", value.value_type()),
@@ -937,20 +936,14 @@ mod tests {
         let first = Record::new("messages")
             .with_id("m1")
             .unwrap()
-            .with_field(
-                "conversation_id",
-                tensack_core::SackValue::Id("cv1".to_owned()),
-            )
+            .with_field("conversation_id", tensack_core::Value::Id("cv1".to_owned()))
             .unwrap()
             .with_field("body", "hello")
             .unwrap();
         let second = Record::new("messages")
             .with_id("m2")
             .unwrap()
-            .with_field(
-                "conversation_id",
-                tensack_core::SackValue::Id("cv1".to_owned()),
-            )
+            .with_field("conversation_id", tensack_core::Value::Id("cv1".to_owned()))
             .unwrap()
             .with_field("body", "world")
             .unwrap();
@@ -1045,7 +1038,7 @@ mod tests {
             .patch_by_id(
                 "messages",
                 "m1",
-                BTreeMap::from([("body".to_owned(), SackValue::Text("updated".to_owned()))]),
+                BTreeMap::from([("body".to_owned(), Value::Text("updated".to_owned()))]),
             )
             .unwrap();
 
@@ -1053,11 +1046,11 @@ mod tests {
         let updated = db.get("messages", "m1").unwrap().unwrap();
         assert_eq!(
             updated.fields().get("body"),
-            Some(&SackValue::Text("updated".to_owned()))
+            Some(&Value::Text("updated".to_owned()))
         );
         assert_eq!(
             updated.fields().get("id"),
-            Some(&SackValue::Id("m1".to_owned()))
+            Some(&Value::Id("m1".to_owned()))
         );
         let _ = fs::remove_dir_all(root);
     }
@@ -1084,7 +1077,7 @@ mod tests {
         db.insert(&row).unwrap();
         let plan = PlanEnvelope::new(PlanOp::Remove, "users")
             .with_lookup("email")
-            .with_key("email", SackValue::Text("a@test.com".to_owned()));
+            .with_key("email", Value::Text("a@test.com".to_owned()));
         db.execute_plan(plan).unwrap();
 
         assert!(db.get("users", "u1").unwrap().is_none());
@@ -1138,7 +1131,7 @@ mod tests {
             .patch_by_id(
                 "messages",
                 "m1",
-                BTreeMap::from([("id".to_owned(), SackValue::Id("m2".to_owned()))]),
+                BTreeMap::from([("id".to_owned(), Value::Id("m2".to_owned()))]),
             )
             .unwrap_err();
 

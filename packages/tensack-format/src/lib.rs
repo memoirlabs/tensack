@@ -9,9 +9,9 @@ use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 
-use tensack_core::{PrimitiveType, Record, SackValue, TableSchema};
+use tensack_core::{PrimitiveType, Record, TableSchema, Value};
 
 /// File format version recognized by this shell.
 pub const FORMAT_VERSION: u32 = 1;
@@ -52,7 +52,7 @@ pub struct LogRecord {
     #[serde(rename = "_ts")]
     pub timestamp_ms: u64,
     pub table: String,
-    pub data: BTreeMap<String, Value>,
+    pub data: BTreeMap<String, JsonValue>,
 }
 
 /// Error during format serialization/parsing.
@@ -605,38 +605,34 @@ pub fn now_ms() -> u64 {
     }
 }
 
-fn value_to_json(value: &SackValue) -> Value {
+fn value_to_json(value: &Value) -> JsonValue {
     match value {
-        SackValue::Id(value) => Value::String(value.clone()),
-        SackValue::Text(value) => Value::String(value.clone()),
-        SackValue::Int(value) => Value::from(*value),
-        SackValue::Float(value) => Value::from(*value),
-        SackValue::Bool(value) => Value::from(*value),
+        Value::Id(value) => JsonValue::String(value.clone()),
+        Value::Text(value) => JsonValue::String(value.clone()),
+        Value::Int(value) => JsonValue::from(*value),
+        Value::Float(value) => JsonValue::from(*value),
+        Value::Bool(value) => JsonValue::from(*value),
     }
 }
 
-fn value_to_string(value: &SackValue) -> String {
+fn value_to_string(value: &Value) -> String {
     match value {
-        SackValue::Id(value) => value.clone(),
-        SackValue::Text(value) => value.clone(),
-        SackValue::Int(value) => value.to_string(),
-        SackValue::Float(value) => value.to_string(),
-        SackValue::Bool(value) => value.to_string(),
+        Value::Id(value) => value.clone(),
+        Value::Text(value) => value.clone(),
+        Value::Int(value) => value.to_string(),
+        Value::Float(value) => value.to_string(),
+        Value::Bool(value) => value.to_string(),
     }
 }
 
-fn parse_ten_value(
-    kind: PrimitiveType,
-    field: &str,
-    value: &str,
-) -> Result<SackValue, FormatError> {
+fn parse_ten_value(kind: PrimitiveType, field: &str, value: &str) -> Result<Value, FormatError> {
     match kind {
-        PrimitiveType::Id => Ok(SackValue::Id(value.to_owned())),
-        PrimitiveType::Text => Ok(SackValue::Text(value.to_owned())),
+        PrimitiveType::Id => Ok(Value::Id(value.to_owned())),
+        PrimitiveType::Text => Ok(Value::Text(value.to_owned())),
         PrimitiveType::Int => {
             value
                 .parse::<i64>()
-                .map(SackValue::Int)
+                .map(Value::Int)
                 .map_err(|_| FormatError::BadTenValue {
                     field: field.to_owned(),
                     kind,
@@ -646,7 +642,7 @@ fn parse_ten_value(
         PrimitiveType::Float => {
             value
                 .parse::<f64>()
-                .map(SackValue::Float)
+                .map(Value::Float)
                 .map_err(|_| FormatError::BadTenValue {
                     field: field.to_owned(),
                     kind,
@@ -656,7 +652,7 @@ fn parse_ten_value(
         PrimitiveType::Bool => {
             value
                 .parse::<bool>()
-                .map(SackValue::Bool)
+                .map(Value::Bool)
                 .map_err(|_| FormatError::BadTenValue {
                     field: field.to_owned(),
                     kind,
@@ -692,7 +688,7 @@ mod tests {
         assert_eq!(decoded.table, "messages");
         assert_eq!(
             decoded.data.get("id"),
-            Some(&Value::String("m1".to_string()))
+            Some(&JsonValue::String("m1".to_string()))
         );
         assert!(schema.table("messages").is_some());
     }

@@ -1,0 +1,19 @@
+[package]
+name = "tensack-benchmark"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tensack = { workspace = true }
+
+[dev-dependencies]
+criterion = "0.5"
+rusqlite = { version = "0.32", features = ["bundled"] }
+tempfile = "3"
+
+[[bench]]
+name = "crud_vs_sqlite"
+harness = false

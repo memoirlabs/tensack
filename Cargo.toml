@@ -9,6 +9,7 @@ members = [
   "packages/tensack-testkit",
   "packages/tensack-schema-compiler",
   "apps/test-lab/note-taking-init",
+  "benchmark",
 ]
 resolver = "2"
 

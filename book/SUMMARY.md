@@ -1,0 +1,17 @@
+# Summary
+
+- [Internal Book](README.md)
+- [Design Philosophy](00-design-philosophy.md)
+- [Product Shape](01-product-shape.md)
+- [Schema](02-schema.md)
+- [Generated API](03-generated-api.md)
+- [Plan Envelope](04-plan-envelope.md)
+- [Storage](05-storage.md)
+- [File Format](06-file-format.md)
+- [Implementation Status](07-implementation-status.md)
+- [Package Boundaries](08-package-boundaries.md)
+- [Naming Rules](09-naming-rules.md)
+- [Work Rules](10-work-rules.md)
+- [Testing](11-testing.md)
+- [Schema Compiler](12-schema-compiler.md)
+- [Reference Archive](reference/README.md)

@@ -2,6 +2,8 @@
 
 This is the compact source of truth for what Tensack is becoming.
 
+The expanded internal design book now lives in [book/README.md](book/README.md).
+
 Tensack is a local-first database layer for small applications and tools. A
 database is a directory on disk. Logical data is described by a schema, written
 to readable `.ten` chunks, and accelerated by rebuildable generated caches.

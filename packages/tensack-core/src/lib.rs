@@ -11,7 +11,7 @@ pub use schema::{DatabaseSchema, FieldSpec, LookupSpec, TableSchema};
 pub use type_declarations::{
     PRIMITIVE_TYPE_DECLARATIONS, PrimitiveTypeDecl, find_decl, rust_type_name,
 };
-pub use value::{PrimitiveType, SackValue};
+pub use value::{PrimitiveType, Value};
 pub use workspace::Workspace;
 
 #[cfg(test)]
