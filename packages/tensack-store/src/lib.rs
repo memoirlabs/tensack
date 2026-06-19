@@ -9,7 +9,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use tensack_core::{DatabaseSchema, Record, SackValue, TableSchema};
+use tensack_core::{DatabaseSchema, Record, TableSchema, Value};
 use tensack_format::{
     Operation, RowPointer, TENB_BINARY_VERSION, TenOperationRecord, TenbCache, TenbLookupEntry,
     TenbRowEntry, decode_ten_operation, decode_ten_row, decode_tenb_cache, encode_ten_header,
@@ -706,12 +706,12 @@ fn record_id(record: &Record) -> io::Result<String> {
     Ok(value_to_lookup_key(value))
 }
 
-fn value_to_lookup_key(value: &SackValue) -> String {
+fn value_to_lookup_key(value: &Value) -> String {
     match value {
-        SackValue::Id(value) | SackValue::Text(value) => value.clone(),
-        SackValue::Int(value) => value.to_string(),
-        SackValue::Float(value) => value.to_string(),
-        SackValue::Bool(value) => value.to_string(),
+        Value::Id(value) | Value::Text(value) => value.clone(),
+        Value::Int(value) => value.to_string(),
+        Value::Float(value) => value.to_string(),
+        Value::Bool(value) => value.to_string(),
     }
 }
 

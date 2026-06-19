@@ -23,7 +23,7 @@ The direction is to end up with:
 - `apps/test-lab` (experimental): broader test environment for temporary experiments, fixtures, and benchmark checks.
 - `tests/contracts`: executable behavior contracts over public behavior.
 - `tests/snapshots`: reviewed, stable-output regression assets.
-- `docs/file-format.md` and `docs/commands.md`: public-facing user docs.
+- `packages/docs/file-format.md` and `packages/docs/commands.md`: public-facing user docs.
 - `user-scripts/install.sh`: local install script once the shell is feature-complete.
 
 ## Current implementation status (important)
@@ -54,19 +54,17 @@ currently implemented.
 
 ## Canonical references for present scope
 
-- `TENSACK_BOOK.md` for current product/backend decisions.
-- `TENSACK_SCHEMA_SPEC.md`, `TENSACK_API_SPEC.md`, `TENSACK_PLAN_SPEC.md`,
-  `TENSACK_STORAGE_SPEC.md`, and `TENSACK_IMPLEMENTATION_STATUS.md` for focused
-  specs.
-- `README.md` and `docs/project-specs.md` for current structure and doc map.
-- `docs/commands.md`, `docs/file-format.md`, `DATABASE_TESTING.md` for supporting
-  contract language and test strategy.
-- `SCHEMA_COMPILER.md` for current schema compiler behavior.
+- `book/README.md` and `book/SUMMARY.md` for internal design philosophy and the
+  current build direction.
+- focused chapters in `book/` for schema, API, plan envelope, storage, file
+  format, status, package boundaries, naming, testing, and schema compiler work.
+- `README.md` and `packages/docs/project-specs.md` for current structure and doc map.
+- `packages/docs/commands.md`, `packages/docs/file-format.md`,
+  and `book/11-testing.md` for supporting contract language and test strategy.
 
 Older long-form docs such as `tensack_rust_backend_architecture.md` and
-`tensack_functional_addendum.md` are background references. If they conflict
-with `TENSACK_BOOK.md` or the focused `TENSACK_*_SPEC.md` files, the newer book
-and focused specs win.
+`tensack_functional_addendum.md` are archived under `book/reference/`. If they
+conflict with the book chapters, the book wins.
 
 ## Core constraints (do not violate without instruction)
 
@@ -96,7 +94,7 @@ and focused specs win.
 - `tests/snapshots` — reviewed snapshots.
 - `apps/test-lab` — broad experiment workspace (UI prototypes + fixtures + speed/sync checks), separate from shipped admin UI.
 - `benchmark` — benchmark definitions.
-- `docs` — current and archive documentation.
+- `packages/docs` — current and archive documentation.
 - `user-scripts` — install script location.
 
 ## Experiment workflow (non-hot-path)

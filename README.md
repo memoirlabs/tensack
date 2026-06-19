@@ -22,10 +22,10 @@ The database is composed in `packages/tensack`. CLI behavior lives in `packages/
 - `benchmark` - benchmark definitions and implementation comparisons.
 - `tests/contracts` - public behavior contracts for CLI, format, and storage boundaries.
 - `tests/snapshots` - reviewed output snapshots for command and format surfaces.
-- `docs` - user-facing format and command documentation.
+- `packages/docs` - user-facing format and command documentation.
 - `user-scripts` - local installation scripts.
-- [TENSACK_BOOK.md](TENSACK_BOOK.md) - compact source of truth for product/backend decisions.
-- [project spec/doc map](docs/project-specs.md) - supporting spec and implementation references.
+- [book](book/README.md) - internal design book for product decisions, philosophy, and backend direction.
+- [project spec/doc map](packages/docs/project-specs.md) - supporting spec and implementation references.
 
 ## Status
 
@@ -54,7 +54,7 @@ db.<table>.count()
 ```
 
 Generated Rust table handles now build the internal plan envelope described in
-[TENSACK_PLAN_SPEC.md](TENSACK_PLAN_SPEC.md). CLI commands and admin UI actions
+[book/04-plan-envelope.md](book/04-plan-envelope.md). CLI commands and admin UI actions
 should use that same executor as their surfaces expand.
 
 ### Minimal CRUD example

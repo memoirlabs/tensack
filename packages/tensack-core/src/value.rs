@@ -10,14 +10,14 @@ pub enum PrimitiveType {
 }
 
 impl PrimitiveType {
-    pub fn matches_value(&self, value: &SackValue) -> bool {
+    pub fn matches_value(&self, value: &Value) -> bool {
         matches!(
             (self, value),
-            (Self::Id, SackValue::Id(_))
-                | (Self::Text, SackValue::Text(_))
-                | (Self::Int, SackValue::Int(_))
-                | (Self::Float, SackValue::Float(_))
-                | (Self::Bool, SackValue::Bool(_))
+            (Self::Id, Value::Id(_))
+                | (Self::Text, Value::Text(_))
+                | (Self::Int, Value::Int(_))
+                | (Self::Float, Value::Float(_))
+                | (Self::Bool, Value::Bool(_))
         )
     }
 }
@@ -60,7 +60,7 @@ impl From<PrimitiveType> for &'static str {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SackValue {
+pub enum Value {
     Id(String),
     Text(String),
     Int(i64),
@@ -68,7 +68,7 @@ pub enum SackValue {
     Bool(bool),
 }
 
-impl SackValue {
+impl Value {
     pub fn value_type(&self) -> PrimitiveType {
         match self {
             Self::Id(_) => PrimitiveType::Id,
@@ -80,37 +80,37 @@ impl SackValue {
     }
 }
 
-impl From<String> for SackValue {
+impl From<String> for Value {
     fn from(value: String) -> Self {
         Self::Text(value)
     }
 }
 
-impl From<&str> for SackValue {
+impl From<&str> for Value {
     fn from(value: &str) -> Self {
         Self::Text(value.to_owned())
     }
 }
 
-impl From<i64> for SackValue {
+impl From<i64> for Value {
     fn from(value: i64) -> Self {
         Self::Int(value)
     }
 }
 
-impl From<i32> for SackValue {
+impl From<i32> for Value {
     fn from(value: i32) -> Self {
         Self::Int(value as i64)
     }
 }
 
-impl From<f64> for SackValue {
+impl From<f64> for Value {
     fn from(value: f64) -> Self {
         Self::Float(value)
     }
 }
 
-impl From<bool> for SackValue {
+impl From<bool> for Value {
     fn from(value: bool) -> Self {
         Self::Bool(value)
     }

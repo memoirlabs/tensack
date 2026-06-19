@@ -1,7 +1,23 @@
 # Benchmarks
 
-Status: placeholder.
+This package contains local performance comparisons for Tensack behavior that
+exists today. Keep benchmark code separate from product runtime code.
 
-Use this directory for benchmark definitions, runners, and comparison notes across different Tensack implementation strategies.
+## CRUD vs SQLite
 
-Keep benchmark code separate from product runtime code. Shared benchmark helpers can be added here when the measured surfaces are clearer.
+Run from the repository root:
+
+```sh
+cargo bench -p tensack-benchmark --bench crud_vs_sqlite
+```
+
+The current benchmark compares basic row CRUD for a small `users` table:
+
+- Tensack `insert` vs SQLite `INSERT`
+- Tensack `get` by id vs SQLite `SELECT ... WHERE id = ?`
+- Tensack `patch_by_id` vs SQLite `UPDATE`
+- Tensack `delete_by_id` vs SQLite `DELETE`
+
+Each sample uses a temporary directory-backed database. The benchmark measures
+the current Tensack storage path, including append writes, metadata updates, and
+generated `.tenb` cache rebuilds after writes.

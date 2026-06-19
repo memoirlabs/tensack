@@ -336,9 +336,7 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
 
         out.push_str("\n        #[derive(Debug, Clone, PartialEq)]\n");
         out.push_str("        pub struct Patch {\n");
-        out.push_str(
-            "            fields: ::std::collections::BTreeMap<String, tensack::SackValue>,\n",
-        );
+        out.push_str("            fields: ::std::collections::BTreeMap<String, tensack::Value>,\n");
         out.push_str("        }\n\n");
         out.push_str("        impl Patch {\n");
         out.push_str("            pub fn new() -> Self {\n");
@@ -356,7 +354,7 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
             out.push_str(&format!(
                 "                self.fields.insert(\"{}\".to_owned(), {});\n",
                 field.name,
-                rust_sack_value_expr(field, "value")
+                rust_value_expr(field, "value")
             ));
             out.push_str("                self\n");
             out.push_str("            }\n");
@@ -372,7 +370,7 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
         out.push_str("            #[derive(Debug, Clone, PartialEq)]\n");
         out.push_str("            pub struct Key {\n");
         out.push_str("                pub lookup: &'static str,\n");
-        out.push_str("                pub value: tensack::SackValue,\n");
+        out.push_str("                pub value: tensack::Value,\n");
         out.push_str("            }\n\n");
         let id_field = table
             .fields
@@ -551,7 +549,7 @@ fn emit_key_constructor(out: &mut String, field: &FieldIr, is_id: bool) {
     out.push_str(&format!("                    lookup: \"{}\",\n", name));
     out.push_str(&format!(
         "                    value: {},\n",
-        rust_sack_value_expr(field, "value")
+        rust_value_expr(field, "value")
     ));
     out.push_str("                }\n");
     out.push_str("            }\n");
@@ -568,7 +566,7 @@ fn emit_get_method(out: &mut String, field: &FieldIr, is_id: bool) {
         "                let plan = tensack::PlanEnvelope::new(tensack::PlanOp::Get, NAME).with_lookup(\"{}\").with_key(\"{}\", {});\n",
         name,
         name,
-        rust_sack_value_expr(field, "value")
+        rust_value_expr(field, "value")
     ));
     out.push_str("                match self.db.execute_plan(plan)? {\n");
     out.push_str("                    tensack::PlanOutcome::Row(Some(record)) => Ok(Some(Row::from_record(&record)?)),\n");
@@ -588,7 +586,7 @@ fn emit_find_method(out: &mut String, field: &FieldIr) {
         "                let plan = tensack::PlanEnvelope::new(tensack::PlanOp::Find, NAME).with_lookup(\"{}\").with_key(\"{}\", {}).with_limit(1000);\n",
         field.name,
         field.name,
-        rust_sack_value_expr(field, "value")
+        rust_value_expr(field, "value")
     ));
     out.push_str("                match self.db.execute_plan(plan)? {\n");
     out.push_str("                    tensack::PlanOutcome::Rows(page) => rows_from_records(page.rows).map_err(tensack::TensackError::from),\n");
@@ -606,19 +604,19 @@ fn rust_param_type(field: &FieldIr) -> String {
     }
 }
 
-fn rust_sack_value_expr(field: &FieldIr, value_expr: &str) -> String {
+fn rust_value_expr(field: &FieldIr, value_expr: &str) -> String {
     match field.ty {
-        PrimitiveType::Id => format!("tensack::SackValue::Id({value_expr}.into())"),
-        PrimitiveType::Text => format!("tensack::SackValue::Text({value_expr}.into())"),
-        PrimitiveType::Int => format!("tensack::SackValue::Int({value_expr})"),
-        PrimitiveType::Float => format!("tensack::SackValue::Float({value_expr})"),
-        PrimitiveType::Bool => format!("tensack::SackValue::Bool({value_expr})"),
+        PrimitiveType::Id => format!("tensack::Value::Id({value_expr}.into())"),
+        PrimitiveType::Text => format!("tensack::Value::Text({value_expr}.into())"),
+        PrimitiveType::Int => format!("tensack::Value::Int({value_expr})"),
+        PrimitiveType::Float => format!("tensack::Value::Float({value_expr})"),
+        PrimitiveType::Bool => format!("tensack::Value::Bool({value_expr})"),
     }
 }
 
 fn rust_record_value_expr(field: &FieldIr) -> String {
     match field.ty {
-        PrimitiveType::Id => format!("tensack::SackValue::Id(self.{})", field.name),
+        PrimitiveType::Id => format!("tensack::Value::Id(self.{})", field.name),
         PrimitiveType::Text | PrimitiveType::Int | PrimitiveType::Float | PrimitiveType::Bool => {
             format!("self.{}", field.name)
         }
@@ -639,7 +637,7 @@ fn rust_record_extract_expr(field: &FieldIr) -> String {
     };
     format!(
         "match record.fields().get(\"{field}\") {{
-                        Some(tensack::SackValue::{variant}(value)) => {value_expr},
+                        Some(tensack::Value::{variant}(value)) => {value_expr},
                         Some(value) => return Err(tensack::SchemaError::TypeMismatch {{
                             table: NAME.to_owned(),
                             field: \"{field}\".to_owned(),

@@ -1,0 +1,290 @@
+use std::collections::BTreeMap;
+
+use criterion::{
+    BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
+};
+use rusqlite::{Connection, params};
+use tempfile::TempDir;
+use tensack::{DatabaseSchema, PrimitiveType, Record, TableSchema, TensackDatabase, Value};
+
+const ROW_COUNTS: &[usize] = &[25, 100];
+const TABLE: &str = "users";
+
+fn user_schema() -> DatabaseSchema {
+    let mut schema = DatabaseSchema::new();
+    let mut users = TableSchema::new(TABLE);
+    users.add_field("id", PrimitiveType::Id).unwrap();
+    users.add_field("email", PrimitiveType::Text).unwrap();
+    users.add_field("name", PrimitiveType::Text).unwrap();
+    users.add_field("age", PrimitiveType::Int).unwrap();
+    users.add_lookup("email", true).unwrap();
+    schema.add_table(users).unwrap();
+    schema
+}
+
+fn user_record(index: usize) -> Record {
+    Record::new(TABLE)
+        .with_id(format!("u{index}"))
+        .unwrap()
+        .with_field("email", format!("user{index}@example.test"))
+        .unwrap()
+        .with_field("name", format!("User {index}"))
+        .unwrap()
+        .with_field("age", index as i64)
+        .unwrap()
+}
+
+fn open_tensack() -> (TempDir, TensackDatabase) {
+    let dir = tempfile::tempdir().unwrap();
+    let db = TensackDatabase::open_local_with_schema(dir.path(), "bench", user_schema());
+    db.init().unwrap();
+    (dir, db)
+}
+
+fn populated_tensack(rows: usize) -> (TempDir, TensackDatabase) {
+    let (dir, db) = open_tensack();
+    for index in 0..rows {
+        db.insert(&user_record(index)).unwrap();
+    }
+    (dir, db)
+}
+
+fn open_sqlite() -> (TempDir, Connection) {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = Connection::open(dir.path().join("bench.sqlite3")).unwrap();
+    conn.execute_batch(
+        "
+        CREATE TABLE users (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            age INTEGER NOT NULL
+        );
+        ",
+    )
+    .unwrap();
+    (dir, conn)
+}
+
+fn insert_sqlite_user(conn: &Connection, index: usize) {
+    conn.execute(
+        "INSERT INTO users (id, email, name, age) VALUES (?1, ?2, ?3, ?4)",
+        params![
+            format!("u{index}"),
+            format!("user{index}@example.test"),
+            format!("User {index}"),
+            index as i64
+        ],
+    )
+    .unwrap();
+}
+
+fn populated_sqlite(rows: usize) -> (TempDir, Connection) {
+    let (dir, conn) = open_sqlite();
+    for index in 0..rows {
+        insert_sqlite_user(&conn, index);
+    }
+    (dir, conn)
+}
+
+fn bench_create(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crud_create");
+
+    for &rows in ROW_COUNTS {
+        group.throughput(Throughput::Elements(rows as u64));
+
+        group.bench_with_input(
+            BenchmarkId::new("tensack_insert", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    open_tensack,
+                    |(_dir, db)| {
+                        for index in 0..rows {
+                            db.insert(&user_record(index)).unwrap();
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("sqlite_insert", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    open_sqlite,
+                    |(_dir, conn)| {
+                        for index in 0..rows {
+                            insert_sqlite_user(&conn, index);
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_read(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crud_read_by_id");
+
+    for &rows in ROW_COUNTS {
+        group.throughput(Throughput::Elements(rows as u64));
+
+        group.bench_with_input(BenchmarkId::new("tensack_get", rows), &rows, |b, &rows| {
+            b.iter_batched(
+                || populated_tensack(rows),
+                |(_dir, db)| {
+                    for index in 0..rows {
+                        let row = db.get(TABLE, &format!("u{index}")).unwrap();
+                        black_box(row);
+                    }
+                },
+                BatchSize::SmallInput,
+            );
+        });
+
+        group.bench_with_input(
+            BenchmarkId::new("sqlite_select", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    || populated_sqlite(rows),
+                    |(_dir, conn)| {
+                        let mut stmt = conn
+                            .prepare("SELECT id, email, name, age FROM users WHERE id = ?1")
+                            .unwrap();
+                        for index in 0..rows {
+                            let row = stmt
+                                .query_row([format!("u{index}")], |row| {
+                                    Ok((
+                                        row.get::<_, String>(0)?,
+                                        row.get::<_, String>(1)?,
+                                        row.get::<_, String>(2)?,
+                                        row.get::<_, i64>(3)?,
+                                    ))
+                                })
+                                .unwrap();
+                            black_box(row);
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_update(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crud_update");
+
+    for &rows in ROW_COUNTS {
+        group.throughput(Throughput::Elements(rows as u64));
+
+        group.bench_with_input(
+            BenchmarkId::new("tensack_patch_by_id", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    || populated_tensack(rows),
+                    |(_dir, db)| {
+                        for index in 0..rows {
+                            db.patch_by_id(
+                                TABLE,
+                                &format!("u{index}"),
+                                BTreeMap::from([
+                                    ("name".to_owned(), Value::Text(format!("Updated {index}"))),
+                                    ("age".to_owned(), Value::Int((index + 1) as i64)),
+                                ]),
+                            )
+                            .unwrap();
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("sqlite_update", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    || populated_sqlite(rows),
+                    |(_dir, conn)| {
+                        for index in 0..rows {
+                            conn.execute(
+                                "UPDATE users SET name = ?1, age = ?2 WHERE id = ?3",
+                                params![
+                                    format!("Updated {index}"),
+                                    (index + 1) as i64,
+                                    format!("u{index}")
+                                ],
+                            )
+                            .unwrap();
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_delete(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crud_delete");
+
+    for &rows in ROW_COUNTS {
+        group.throughput(Throughput::Elements(rows as u64));
+
+        group.bench_with_input(
+            BenchmarkId::new("tensack_delete_by_id", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    || populated_tensack(rows),
+                    |(_dir, db)| {
+                        for index in 0..rows {
+                            db.delete_by_id(TABLE, &format!("u{index}")).unwrap();
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("sqlite_delete", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    || populated_sqlite(rows),
+                    |(_dir, conn)| {
+                        for index in 0..rows {
+                            conn.execute("DELETE FROM users WHERE id = ?1", [format!("u{index}")])
+                                .unwrap();
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+criterion_group!(
+    name = benches;
+    config = Criterion::default().sample_size(10);
+    targets = bench_create, bench_read, bench_update, bench_delete
+);
+criterion_main!(benches);

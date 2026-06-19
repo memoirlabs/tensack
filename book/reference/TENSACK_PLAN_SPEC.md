@@ -251,15 +251,27 @@ Returns a count of live matching rows.
 
 ## Current Implementation
 
-The current code does not yet have a first-class plan executor. Existing public
-methods call the store directly:
+Implemented today:
 
+- `PlanOp`
+- `PlanEnvelope`
+- `PlanOutcome`
+- `TensackDatabase::execute_plan`
 - `insert`
-- `put`
-- `delete_by_id`
+- `upsert`
+- `patch`
+- `remove`
 - `get`
-- `get_by`
-- `get_many_by`
+- `find`
+- `scan`
+- `count`
 
-The plan layer is the next contract to introduce before expanding CLI/admin UI
-behavior.
+Current compatibility methods such as `insert`, `put`, `get`, `get_by`,
+`get_many_by`, `patch_by_id`, `scan`, and `count` route through the plan layer
+where practical.
+
+Not implemented yet:
+
+- JSON serialization/deserialization for the envelope.
+- CLI commands that accept or emit plan envelopes.
+- Admin UI execution through plan envelopes.

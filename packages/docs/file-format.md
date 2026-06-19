@@ -1,8 +1,8 @@
 # Tensack File Layout
 
 This document describes the durable layout used by the current local store:
-the root-level [TENSACK_STORAGE_SPEC.md](../TENSACK_STORAGE_SPEC.md) is the
-current storage decision spec.
+the internal [book storage chapter](../../book/05-storage.md) is the current
+storage decision spec.
 
 ```txt
 schema.tensack  = logical schema truth

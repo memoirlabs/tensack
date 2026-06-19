@@ -34,7 +34,7 @@ This document separates shipped behavior from target design.
 - `FieldSpec`
 - `LookupSpec`
 - `Record`
-- `SackValue`
+- `Value`
 - primitive types: `id`, `text`, `int`, `float`, `bool`
 - schema validation for required fields, unknown fields, and type mismatch
 
