@@ -4,14 +4,14 @@
 //! storage engine. Apps should usually depend on this crate instead of wiring
 //! lower-level packages together directly.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub use tensack_core::{
     DatabaseSchema, FieldSpec, PrimitiveType, Record, SchemaError, TableSchema, Value, Workspace,
 };
 pub use tensack_format::Operation;
-pub use tensack_store::{AppendResult, LocalStore};
+pub use tensack_store::{AppendOperation, AppendResult, LocalStore};
 
 const DEFAULT_PLAN_LIMIT: usize = 100;
 const MAX_PLAN_LIMIT: usize = 1_000;
@@ -735,6 +735,107 @@ impl TensackDatabase {
         W::from_outcome(outcome)
     }
 
+    /// Applies multiple state changes for one table in one storage batch.
+    pub fn write_many(&self, changes: &[WriteChange]) -> Result<Vec<AppendResult>, TensackError> {
+        let plans = changes
+            .iter()
+            .cloned()
+            .map(WriteChange::into_plan)
+            .collect::<Vec<_>>();
+        let Some(first) = plans.first() else {
+            return Ok(Vec::new());
+        };
+        if plans.iter().any(|plan| plan.table != first.table) {
+            return Err(PlanError::Invalid(
+                "write_many changes must all belong to the same table".to_owned(),
+            )
+            .into());
+        }
+        if plans.iter().all(|plan| plan.op == PlanOp::Insert) {
+            let records = plans
+                .iter()
+                .map(|plan| {
+                    let table = self.schema.table(&plan.table).ok_or_else(|| {
+                        PlanError::Invalid(format!("unknown table `{}`", plan.table))
+                    })?;
+                    let record = self.record_from_plan_value(table.name(), &plan.value)?;
+                    self.schema.validate_record(&record)?;
+                    Ok(record)
+                })
+                .collect::<Result<Vec<_>, TensackError>>()?;
+            return self.insert_many(&records);
+        }
+        if plans.iter().any(|plan| plan.op == PlanOp::Insert) {
+            return Err(PlanError::Invalid(
+                "write_many insert changes cannot be mixed with other changes; use insert_many"
+                    .to_owned(),
+            )
+            .into());
+        }
+
+        let mut operations = Vec::with_capacity(plans.len());
+        let mut touched_ids = BTreeSet::new();
+        for plan in plans {
+            let table = self
+                .schema
+                .table(&plan.table)
+                .ok_or_else(|| PlanError::Invalid(format!("unknown table `{}`", plan.table)))?;
+            match plan.op {
+                PlanOp::Upsert => {
+                    let record = self.record_from_plan_value(table.name(), &plan.value)?;
+                    self.schema.validate_record(&record)?;
+                    let id = record_id(&record)?;
+                    if !touched_ids.insert(id.clone()) {
+                        return Err(PlanError::Invalid(format!(
+                            "write_many touches row `{id}` more than once"
+                        ))
+                        .into());
+                    }
+                    operations.push(AppendOperation::put(record));
+                }
+                PlanOp::Patch => {
+                    validate_patch_plan(table, &plan)?;
+                    let mut row = self.require_unique_row(&plan)?;
+                    let id = record_id(&row)?;
+                    if !touched_ids.insert(id.clone()) {
+                        return Err(PlanError::Invalid(format!(
+                            "write_many touches row `{id}` more than once"
+                        ))
+                        .into());
+                    }
+                    for (name, value) in plan.value {
+                        row.insert_field(name, value)?;
+                    }
+                    self.schema.validate_record(&row)?;
+                    operations.push(AppendOperation::put(row));
+                }
+                PlanOp::Remove => {
+                    let row = self.require_unique_row(&plan)?;
+                    let id = record_id(&row)?;
+                    if !touched_ids.insert(id.clone()) {
+                        return Err(PlanError::Invalid(format!(
+                            "write_many touches row `{id}` more than once"
+                        ))
+                        .into());
+                    }
+                    let mut record = Record::new(table.name());
+                    record.insert_id(id);
+                    operations.push(AppendOperation::delete(record));
+                }
+                PlanOp::Get | PlanOp::Find | PlanOp::Scan | PlanOp::Count | PlanOp::Insert => {
+                    return Err(PlanError::Invalid(
+                        "write_many only accepts state changes".to_owned(),
+                    )
+                    .into());
+                }
+            }
+        }
+
+        self.store
+            .append_many(&self.schema, &operations)
+            .map_err(TensackError::from)
+    }
+
     /// Inserts a new row. Fails if the id already exists.
     pub fn insert(&self, record: &Record) -> Result<AppendResult, TensackError> {
         self.write(WriteChange::add_record(record.clone()))
@@ -904,21 +1005,7 @@ impl TensackDatabase {
                     .map_err(TensackError::from)
             }
             PlanOp::Patch => {
-                if plan.value.is_empty() {
-                    return Err(PlanError::Invalid("patch value cannot be empty".to_owned()).into());
-                }
-                if plan.value.contains_key("id") {
-                    return Err(PlanError::Invalid("patch cannot change id".to_owned()).into());
-                }
-                for field in plan.value.keys() {
-                    if table.field(field).is_none() {
-                        return Err(PlanError::Invalid(format!(
-                            "unknown field `{field}` for table `{}`",
-                            table.name()
-                        ))
-                        .into());
-                    }
-                }
+                validate_patch_plan(table, &plan)?;
                 let mut row = self.require_unique_row(&plan)?;
                 for (name, value) in plan.value {
                     row.insert_field(name, value)?;
@@ -1092,6 +1179,24 @@ fn checked_cursor(cursor: Option<&str>) -> Result<usize, PlanError> {
 fn next_cursor(offset: usize, limit: usize, total: usize) -> Option<String> {
     let next = offset.saturating_add(limit);
     (next < total).then(|| next.to_string())
+}
+
+fn validate_patch_plan(table: &TableSchema, plan: &PlanEnvelope) -> Result<(), PlanError> {
+    if plan.value.is_empty() {
+        return Err(PlanError::Invalid("patch value cannot be empty".to_owned()));
+    }
+    if plan.value.contains_key("id") {
+        return Err(PlanError::Invalid("patch cannot change id".to_owned()));
+    }
+    for field in plan.value.keys() {
+        if table.field(field).is_none() {
+            return Err(PlanError::Invalid(format!(
+                "unknown field `{field}` for table `{}`",
+                table.name()
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn value_to_lookup_key(value: &Value) -> String {
@@ -1380,6 +1485,95 @@ mod tests {
 
         assert!(db.insert_many(&rows).is_err());
         assert!(!root.join("chat/tables/users/zz/zzz.ten").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_many_batches_patches_into_one_chunk() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
+        let rows = vec![
+            Record::new("messages")
+                .with_id("m1")
+                .unwrap()
+                .with_field("body", "hello")
+                .unwrap(),
+            Record::new("messages")
+                .with_id("m2")
+                .unwrap()
+                .with_field("body", "world")
+                .unwrap(),
+        ];
+        db.insert_many(&rows).unwrap();
+
+        let results = db
+            .write_many(&[
+                change::edit_id(
+                    "messages",
+                    "m1",
+                    BTreeMap::from([("body".to_owned(), Value::Text("first".to_owned()))]),
+                ),
+                change::edit_id(
+                    "messages",
+                    "m2",
+                    BTreeMap::from([("body".to_owned(), Value::Text("second".to_owned()))]),
+                ),
+            ])
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].tx_id, 3);
+        assert_eq!(results[1].tx_id, 4);
+        assert!(root.join("chat/tables/messages/zz/zzy.ten").exists());
+        assert!(!root.join("chat/tables/messages/zz/zzx.ten").exists());
+        let chunk = fs::read_to_string(root.join("chat/tables/messages/zz/zzy.ten")).unwrap();
+        assert!(chunk.contains("R\t3\tm1\tfirst\n"));
+        assert!(chunk.contains("R\t4\tm2\tsecond\n"));
+        assert_eq!(
+            db.get(selector::id("messages", "m2"))
+                .unwrap()
+                .unwrap()
+                .fields()
+                .get("body"),
+            Some(&Value::Text("second".to_owned()))
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_many_batches_removes_into_one_chunk() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
+        let rows = vec![
+            Record::new("messages")
+                .with_id("m1")
+                .unwrap()
+                .with_field("body", "hello")
+                .unwrap(),
+            Record::new("messages")
+                .with_id("m2")
+                .unwrap()
+                .with_field("body", "world")
+                .unwrap(),
+        ];
+        db.insert_many(&rows).unwrap();
+
+        let results = db
+            .write_many(&[
+                change::remove_id("messages", "m1"),
+                change::remove_id("messages", "m2"),
+            ])
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].tx_id, 3);
+        assert_eq!(results[1].tx_id, 4);
+        assert_eq!(db.count("messages").unwrap(), 0);
+        assert!(root.join("chat/tables/messages/zz/zzy.ten").exists());
+        assert!(!root.join("chat/tables/messages/zz/zzx.ten").exists());
+        let chunk = fs::read_to_string(root.join("chat/tables/messages/zz/zzy.ten")).unwrap();
+        assert!(chunk.contains("D\t3\tm1\n"));
+        assert!(chunk.contains("D\t4\tm2\n"));
         let _ = fs::remove_dir_all(root);
     }
 
