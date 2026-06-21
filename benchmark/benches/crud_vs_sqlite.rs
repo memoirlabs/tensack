@@ -280,6 +280,35 @@ fn bench_update(c: &mut Criterion) {
         );
 
         group.bench_with_input(
+            BenchmarkId::new("tensack_write_many_edit", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    || populated_tensack(rows),
+                    |(_dir, db)| {
+                        let changes = (0..rows)
+                            .map(|index| {
+                                change::edit_id(
+                                    TABLE,
+                                    format!("u{index}"),
+                                    BTreeMap::from([
+                                        (
+                                            "name".to_owned(),
+                                            Value::Text(format!("Updated {index}")),
+                                        ),
+                                        ("age".to_owned(), Value::Int((index + 1) as i64)),
+                                    ]),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        db.write_many(&changes).unwrap();
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(
             BenchmarkId::new("sqlite_update", rows),
             &rows,
             |b, &rows| {
@@ -324,6 +353,23 @@ fn bench_delete(c: &mut Criterion) {
                             db.write(change::remove_id(TABLE, format!("u{index}")))
                                 .unwrap();
                         }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("tensack_write_many_remove", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    || populated_tensack(rows),
+                    |(_dir, db)| {
+                        let changes = (0..rows)
+                            .map(|index| change::remove_id(TABLE, format!("u{index}")))
+                            .collect::<Vec<_>>();
+                        db.write_many(&changes).unwrap();
                     },
                     BatchSize::SmallInput,
                 );
