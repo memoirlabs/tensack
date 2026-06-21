@@ -4,10 +4,11 @@
 //! `tensack.toml` physical layout map, and rebuilds generated `.tenb` lookup
 //! caches from canonical `.ten` data.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 use tensack_core::{DatabaseSchema, Record, TableSchema, Value};
 use tensack_format::{
@@ -27,11 +28,30 @@ const MAX_GENERATIONS: u64 = 36u64.pow(GENERATION_WIDTH as u32);
 const MAX_CHUNKS: u64 = CHUNKS_PER_GENERATION * MAX_GENERATIONS;
 
 /// Local store handle.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct LocalStore {
     root: PathBuf,
     workspace: String,
+    tenb_cache: Arc<RwLock<BTreeMap<String, TenbCache>>>,
 }
+
+impl std::fmt::Debug for LocalStore {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LocalStore")
+            .field("root", &self.root)
+            .field("workspace", &self.workspace)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for LocalStore {
+    fn eq(&self, other: &Self) -> bool {
+        self.root == other.root && self.workspace == other.workspace
+    }
+}
+
+impl Eq for LocalStore {}
 
 /// Result of appending one logical row entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +70,7 @@ impl LocalStore {
         Self {
             root: root.into(),
             workspace: workspace.into(),
+            tenb_cache: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 
@@ -310,7 +331,7 @@ impl LocalStore {
         let table = schema
             .table(table_name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
-        let Some(entry) = cache.rows.iter().find(|entry| entry.id == id) else {
+        let Some(entry) = row_entry_by_id(&cache, id) else {
             return Ok(None);
         };
         self.read_row_pointer(table, &entry.ptr).map(Some)
@@ -334,15 +355,14 @@ impl LocalStore {
                 format!("unknown lookup `{field_name}` for table `{table_name}`"),
             ));
         }
-        let ids: BTreeSet<_> = cache
-            .lookups
-            .iter()
-            .filter(|entry| entry.field_name == field_name && entry.key == key)
-            .map(|entry| entry.id.as_str())
-            .collect();
+        if field_name == "id" {
+            return self
+                .get_by_id(schema, table_name, key)
+                .map(|row| row.into_iter().collect());
+        }
         let mut rows = Vec::new();
-        for id in ids {
-            if let Some(row_entry) = cache.rows.iter().find(|entry| entry.id == id) {
+        for lookup_entry in lookup_entries_by_key(&cache, field_name, key) {
+            if let Some(row_entry) = row_entry_by_id(&cache, &lookup_entry.id) {
                 rows.push(self.read_row_pointer(table, &row_entry.ptr)?);
             }
         }
@@ -422,11 +442,10 @@ impl LocalStore {
                 format!("unknown lookup `{field_name}` for table `{table_name}`"),
             ));
         }
-        Ok(cache
-            .lookups
-            .iter()
-            .filter(|entry| entry.field_name == field_name && entry.key == key)
-            .count())
+        if field_name == "id" {
+            return Ok(usize::from(row_entry_by_id(&cache, key).is_some()));
+        }
+        Ok(lookup_entries_by_key(&cache, field_name, key).len())
     }
 
     /// Rebuilds the `.tenb` cache from canonical `.ten` files.
@@ -462,6 +481,7 @@ impl LocalStore {
             }
         }
         validate_unique_lookups(table, &lookups)?;
+        sort_tenb_entries(&mut rows, &mut lookups);
 
         let cache = TenbCache {
             version: TENB_BINARY_VERSION,
@@ -485,6 +505,12 @@ impl LocalStore {
             .table(table_name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
         let path = self.tenb_path(table.name());
+        if let Some(cache) = self.cached_tenb(table.name(), &schema.schema_hash())? {
+            if !path.exists() {
+                self.write_tenb_cache(table.name(), &cache)?;
+            }
+            return Ok(cache);
+        }
         if path.exists() {
             let bytes = fs::read(&path)?;
             if let Ok(cache) = decode_tenb_cache(&bytes)
@@ -492,6 +518,7 @@ impl LocalStore {
                 && cache.table == table.name()
                 && cache.schema_hash == schema.schema_hash()
             {
+                self.remember_tenb_cache(cache.clone())?;
                 return Ok(cache);
             }
         }
@@ -613,10 +640,7 @@ impl LocalStore {
                 )
             })?;
             let key = value_to_lookup_key(value);
-            if let Some(conflict) = cache
-                .lookups
-                .iter()
-                .find(|entry| entry.field_name == lookup.field_name() && entry.key == key)
+            if let Some(conflict) = lookup_entries_by_key(&cache, lookup.field_name(), &key).first()
                 && conflict.id != id
             {
                 return Err(io::Error::new(
@@ -670,23 +694,7 @@ impl LocalStore {
             }
         }
 
-        cache.rows.sort_by(|left, right| left.id.cmp(&right.id));
-        let lookup_order: BTreeMap<_, _> = table
-            .lookup_specs_with_implicit_id()
-            .into_iter()
-            .enumerate()
-            .map(|(index, lookup)| (lookup.field_name().to_owned(), index))
-            .collect();
-        cache.lookups.sort_by(|left, right| {
-            left.id
-                .cmp(&right.id)
-                .then_with(|| {
-                    lookup_order
-                        .get(&left.field_name)
-                        .cmp(&lookup_order.get(&right.field_name))
-                })
-                .then_with(|| left.key.cmp(&right.key))
-        });
+        sort_tenb_entries(&mut cache.rows, &mut cache.lookups);
         validate_unique_lookups(table, &cache.lookups)?;
 
         let mut hash_bytes = Vec::with_capacity(ptr.chunk_name.len() + 1 + chunk_bytes.len());
@@ -707,6 +715,29 @@ impl LocalStore {
         let tmp = path.with_extension("tenb.tmp");
         fs::write(&tmp, encode_tenb_cache(cache))?;
         fs::rename(tmp, path)?;
+        self.remember_tenb_cache(cache.clone())?;
+        Ok(())
+    }
+
+    fn cached_tenb(&self, table_name: &str, schema_hash: &str) -> io::Result<Option<TenbCache>> {
+        let guard = self
+            .tenb_cache
+            .read()
+            .map_err(|_| io::Error::other("tenb cache lock poisoned"))?;
+        Ok(guard.get(table_name).and_then(|cache| {
+            (cache.version == TENB_BINARY_VERSION
+                && cache.table == table_name
+                && cache.schema_hash == schema_hash)
+                .then(|| cache.clone())
+        }))
+    }
+
+    fn remember_tenb_cache(&self, cache: TenbCache) -> io::Result<()> {
+        let mut guard = self
+            .tenb_cache
+            .write()
+            .map_err(|_| io::Error::other("tenb cache lock poisoned"))?;
+        guard.insert(cache.table.clone(), cache);
         Ok(())
     }
 }
@@ -848,6 +879,37 @@ fn validate_unique_lookups(table: &TableSchema, lookups: &[TenbLookupEntry]) -> 
         }
     }
     Ok(())
+}
+
+fn sort_tenb_entries(rows: &mut [TenbRowEntry], lookups: &mut [TenbLookupEntry]) {
+    rows.sort_by(|left, right| left.id.cmp(&right.id));
+    lookups.sort_by(|left, right| {
+        left.field_name
+            .cmp(&right.field_name)
+            .then_with(|| left.key.cmp(&right.key))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+}
+
+fn row_entry_by_id<'a>(cache: &'a TenbCache, id: &str) -> Option<&'a TenbRowEntry> {
+    cache
+        .rows
+        .binary_search_by(|entry| entry.id.as_str().cmp(id))
+        .ok()
+        .map(|index| &cache.rows[index])
+}
+
+fn lookup_entries_by_key<'a>(
+    cache: &'a TenbCache,
+    field_name: &str,
+    key: &str,
+) -> &'a [TenbLookupEntry] {
+    let start = cache.lookups.partition_point(|entry| {
+        (entry.field_name.as_str(), entry.key.as_str()) < (field_name, key)
+    });
+    let len = cache.lookups[start..]
+        .partition_point(|entry| entry.field_name == field_name && entry.key == key);
+    &cache.lookups[start..start + len]
 }
 
 fn chunk_path(global_chunk_counter: u64) -> io::Result<PathBuf> {
