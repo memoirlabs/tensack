@@ -24,6 +24,8 @@ The direction is to end up with:
 - `tests/contracts`: executable behavior contracts over public behavior.
 - `tests/snapshots`: reviewed, stable-output regression assets.
 - `packages/docs/file-format.md` and `packages/docs/commands.md`: public-facing user docs.
+- `book/13-sqlite-mapping.md`: canonical mapping from simple SQLite operations
+  to generated Tensack syntax.
 - `user-scripts/install.sh`: local install script once the shell is feature-complete.
 
 ## Current implementation status (important)
@@ -59,6 +61,8 @@ currently implemented.
 - focused chapters in `book/` for schema, API, plan envelope, storage, file
   format, status, package boundaries, naming, testing, and schema compiler work.
 - `README.md` and `packages/docs/project-specs.md` for current structure and doc map.
+- `book/13-sqlite-mapping.md` for the authoritative explanation of how simple
+  SQLite-shaped operations map to Tensack's schema-declared, generated API.
 - `packages/docs/commands.md`, `packages/docs/file-format.md`,
   and `book/11-testing.md` for supporting contract language and test strategy.
 
@@ -70,6 +74,9 @@ conflict with the book chapters, the book wins.
 
 - Keep storage local to process directory-backed data; do not introduce hosted DB
   dependencies as the primary engine (SQL databases included).
+- Do not add SQL or a generic query-string grammar as the normal product API;
+  simple SQLite-shaped operations should map to declared lookups and generated
+  table methods.
 - Do not expose storage internals as part of normal user APIs.
 - Do not claim “implemented” when a feature is only planned or stubbed.
 - Avoid speculative abstractions outside the existing boundary model.

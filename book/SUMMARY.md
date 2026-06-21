@@ -14,4 +14,5 @@
 - [Work Rules](10-work-rules.md)
 - [Testing](11-testing.md)
 - [Schema Compiler](12-schema-compiler.md)
+- [SQLite Mapping](13-sqlite-mapping.md)
 - [Reference Archive](reference/README.md)

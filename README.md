@@ -27,6 +27,15 @@ The database is composed in `packages/tensack`. CLI behavior lives in `packages/
 - [book](book/README.md) - internal design book for product decisions, philosophy, and backend direction.
 - [project spec/doc map](packages/docs/project-specs.md) - supporting spec and implementation references.
 
+## Canonical Design References
+
+The book is the source of truth for current product direction. Start with:
+
+- [Product shape](book/01-product-shape.md) - schema compiler, generated API, plan executor, and local store flow.
+- [Generated API](book/03-generated-api.md) - intended table-first user API.
+- [Plan envelope](book/04-plan-envelope.md) - internal execution contract shared by generated APIs, CLI, and admin UI.
+- [SQLite mapping](book/13-sqlite-mapping.md) - how simple SQLite operations map to Tensack syntax without adding SQL.
+
 ## Status
 
 The workspace now includes a minimal writable data path: schema-validated rows
@@ -37,7 +46,9 @@ full-text search and is not required for normal reads.
 
 The current product target is intentionally plain: a tiny local table database
 with CRUD, typed primitive fields, and rebuildable lookup caches. No SQL, no
-chat-specific primary surface, no external database.
+chat-specific primary surface, no external database. Simple SQLite-shaped ideas
+map to declared schema lookups and generated table methods, not to a user-authored
+query-string language.
 
 The target public API is table-first and generated from schema:
 
@@ -54,8 +65,10 @@ db.<table>.count()
 ```
 
 Generated Rust table handles now build the internal plan envelope described in
-[book/04-plan-envelope.md](book/04-plan-envelope.md). CLI commands and admin UI actions
-should use that same executor as their surfaces expand.
+[book/04-plan-envelope.md](book/04-plan-envelope.md). CLI commands and admin UI
+actions should use that same executor as their surfaces expand. See
+[book/13-sqlite-mapping.md](book/13-sqlite-mapping.md) for the intended mapping
+from common SQLite operations to Tensack syntax.
 
 ### Minimal CRUD example
 

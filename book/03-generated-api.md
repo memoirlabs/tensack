@@ -5,6 +5,9 @@ The generated API is the intended user-facing API.
 It should hide storage details and avoid generic table/lookup strings in normal
 application code.
 
+For a direct comparison between common SQLite statements and the generated
+Tensack shape, see [SQLite Mapping](13-sqlite-mapping.md).
+
 ## Operations
 
 ```txt
@@ -97,4 +100,3 @@ db.get_by("messages", "conversation_id", "cv1")
 ```
 
 That can exist as compatibility/runtime glue, but it is not the product API.
-
