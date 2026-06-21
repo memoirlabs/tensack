@@ -46,8 +46,8 @@ for a table.
 ## Readable Row Files
 
 `.ten` files are Tensack-readable row segments. The primary product surface is
-generic tables with primitive fields and CRUD operations. The current table
-profile uses:
+`get` selectors, future `watch` subscriptions, and `write` changes generated
+from generic tables with primitive fields. The current table profile uses:
 
 ```txt
 TEN<TAB>1<TAB>table<TAB>messages<TAB><schema_hash>
@@ -137,7 +137,7 @@ Implemented now:
 - append-only `R` put rows and `D` delete tombstones
 - generated `.tenb` cache rebuilds from `.ten`
 - id lookup through `.tenb`
-- declared lookup reads through `.tenb`
+- declared lookup selectors through `.tenb`
 - table scan and count through `.tenb`
 - `tensack.toml` physical layout metadata
 

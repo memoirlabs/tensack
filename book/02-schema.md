@@ -69,8 +69,8 @@ lookup conversation_id
 
 - `unique` means at most one live row can use the key.
 - Omitted `unique` means many rows can share the key.
-- `get` is generated for unique lookups.
-- `find` is generated for non-unique lookups.
+- unique lookups generate selectors that return zero or one row.
+- non-unique lookups generate selectors that return many rows.
 
 ## Implementation
 
@@ -89,6 +89,6 @@ database_schema_from_ir(ir)
 emit_raw_rust(ir)
 ```
 
-The generated output already includes table handles, patches, lookup keys,
-scan/count helpers, and table extension traits. It still needs stable snapshots.
-
+The generated output already includes selectors, changes, patches, lookup keys,
+page/count selectors, and table extension traits. It still needs stable
+snapshots.

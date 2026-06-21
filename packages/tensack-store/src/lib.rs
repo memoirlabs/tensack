@@ -4,11 +4,11 @@
 //! `tensack.toml` physical layout map, and rebuilds generated `.tenb` lookup
 //! caches from canonical `.ten` data.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use tensack_core::{DatabaseSchema, Record, TableSchema, Value};
 use tensack_format::{
@@ -27,12 +27,23 @@ const CHUNKS_PER_GENERATION: u64 = 36u64.pow(CHUNK_WIDTH as u32);
 const MAX_GENERATIONS: u64 = 36u64.pow(GENERATION_WIDTH as u32);
 const MAX_CHUNKS: u64 = CHUNKS_PER_GENERATION * MAX_GENERATIONS;
 
+type TableName = String;
+type RowId = String;
+type ChunkName = String;
+type CachedChunk = Arc<Vec<u8>>;
+
 /// Local store handle.
 #[derive(Clone)]
 pub struct LocalStore {
     root: PathBuf,
     workspace: String,
-    tenb_cache: Arc<RwLock<BTreeMap<String, TenbCache>>>,
+    tenb_cache: Arc<RwLock<BTreeMap<TableName, Arc<TenbCache>>>>,
+    row_cache: Arc<RwLock<BTreeMap<(TableName, RowId), Record>>>,
+    chunk_cache: Arc<RwLock<BTreeMap<(TableName, ChunkName), CachedChunk>>>,
+    next_tx_cache: Arc<RwLock<Option<u64>>>,
+    next_chunk_cache: Arc<RwLock<BTreeMap<String, u64>>>,
+    layout_cache: Arc<RwLock<BTreeSet<(String, String)>>>,
+    table_writers: Arc<RwLock<BTreeMap<String, Arc<Mutex<()>>>>>,
 }
 
 impl std::fmt::Debug for LocalStore {
@@ -64,6 +75,33 @@ pub struct AppendResult {
     pub bytes_written: u64,
 }
 
+/// One append-only `.ten` operation for a batch write.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppendOperation {
+    /// Operation to append.
+    pub operation: Operation,
+    /// Row-like record. Delete operations only require the `id` field.
+    pub record: Record,
+}
+
+impl AppendOperation {
+    /// Creates a put operation.
+    pub fn put(record: Record) -> Self {
+        Self {
+            operation: Operation::Put,
+            record,
+        }
+    }
+
+    /// Creates a delete operation.
+    pub fn delete(record: Record) -> Self {
+        Self {
+            operation: Operation::Delete,
+            record,
+        }
+    }
+}
+
 impl LocalStore {
     /// Creates a store handle without touching the filesystem.
     pub fn new(root: impl Into<PathBuf>, workspace: impl Into<String>) -> Self {
@@ -71,6 +109,12 @@ impl LocalStore {
             root: root.into(),
             workspace: workspace.into(),
             tenb_cache: Arc::new(RwLock::new(BTreeMap::new())),
+            row_cache: Arc::new(RwLock::new(BTreeMap::new())),
+            chunk_cache: Arc::new(RwLock::new(BTreeMap::new())),
+            next_tx_cache: Arc::new(RwLock::new(None)),
+            next_chunk_cache: Arc::new(RwLock::new(BTreeMap::new())),
+            layout_cache: Arc::new(RwLock::new(BTreeSet::new())),
+            table_writers: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 
@@ -144,6 +188,29 @@ impl LocalStore {
         self.append(schema, Operation::Put, record)
     }
 
+    /// Appends multiple puts to one table only when every id is new.
+    pub fn append_insert_many(
+        &self,
+        schema: &DatabaseSchema,
+        records: &[Record],
+    ) -> io::Result<Vec<AppendResult>> {
+        let operations = records
+            .iter()
+            .cloned()
+            .map(AppendOperation::put)
+            .collect::<Vec<_>>();
+        self.append_many_with_mode(schema, &operations, AppendMode::InsertOnly)
+    }
+
+    /// Appends multiple operations to one table in one `.ten` chunk.
+    pub fn append_many(
+        &self,
+        schema: &DatabaseSchema,
+        operations: &[AppendOperation],
+    ) -> io::Result<Vec<AppendResult>> {
+        self.append_many_with_mode(schema, operations, AppendMode::Upsert)
+    }
+
     /// Appends a delete event to the `.ten` table segment.
     pub fn append_delete(
         &self,
@@ -179,11 +246,15 @@ impl LocalStore {
         let table = schema
             .table(record.table())
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
+        let writer = self.table_writer(table.name())?;
+        let _writer_guard = writer
+            .lock()
+            .map_err(|_| io::Error::other("table writer lock poisoned"))?;
         self.ensure_table_layout(table, &schema.schema_hash())?;
         let cache = if operation == Operation::Put {
             self.validate_unique_lookup_conflicts(schema, table, record)?
         } else {
-            self.ensure_tenb_current(schema, table.name())?
+            self.ensure_tenb_snapshot(schema, table.name())?
         };
 
         let tx_id = self.next_tx_id()?;
@@ -212,11 +283,12 @@ impl LocalStore {
         file.write_all(&chunk_bytes)?;
 
         let ptr = RowPointer {
-            chunk_name,
+            chunk_name: chunk_name.clone(),
             offset: row_offset,
             len: bytes_written as u32,
             tx_id,
         };
+        self.remember_chunk(table.name(), &chunk_name, chunk_bytes.clone())?;
         self.update_tenb_after_append(
             table,
             TenbAppend {
@@ -228,6 +300,8 @@ impl LocalStore {
                 schema_hash: schema.schema_hash(),
             },
         )?;
+        self.set_next_tx_id(tx_id.saturating_add(1))?;
+        self.set_next_chunk_counter(table.name(), chunk_counter.saturating_add(1))?;
         self.write_metadata(schema, tx_id.saturating_add(1))?;
 
         Ok(AppendResult {
@@ -256,8 +330,16 @@ impl LocalStore {
 
     /// Computes next transaction id from private engine metadata.
     pub fn next_tx_id(&self) -> io::Result<u64> {
+        if let Some(value) = *self
+            .next_tx_cache
+            .read()
+            .map_err(|_| io::Error::other("next tx cache lock poisoned"))?
+        {
+            return Ok(value);
+        }
         let metadata = self.metadata_path();
         if !metadata.exists() {
+            self.set_next_tx_id(1)?;
             return Ok(1);
         }
         let file = File::open(metadata)?;
@@ -266,15 +348,27 @@ impl LocalStore {
             let Some(value) = line.strip_prefix("next_tx = ") else {
                 continue;
             };
-            return value.trim().parse::<u64>().map_err(|error| {
+            let parsed = value.trim().parse::<u64>().map_err(|error| {
                 io::Error::new(io::ErrorKind::InvalidData, format!("bad next_tx: {error}"))
-            });
+            })?;
+            self.set_next_tx_id(parsed)?;
+            return Ok(parsed);
         }
+        self.set_next_tx_id(1)?;
         Ok(1)
     }
 
     /// Computes the next chunk counter for one table from metadata, falling back to files.
     pub fn next_chunk_counter(&self, table_name: &str) -> io::Result<u64> {
+        if let Some(value) = self
+            .next_chunk_cache
+            .read()
+            .map_err(|_| io::Error::other("next chunk cache lock poisoned"))?
+            .get(table_name)
+            .copied()
+        {
+            return Ok(value);
+        }
         let discovered_next = ten_files_in_read_order(&self.table_dir(table_name))?.len() as u64;
         let metadata = self.metadata_path();
         if metadata.exists() {
@@ -290,7 +384,7 @@ impl LocalStore {
                     let Some(value) = line.strip_prefix("next_chunk = ") else {
                         continue;
                     };
-                    return value
+                    let parsed = value
                         .trim()
                         .parse::<u64>()
                         .map_err(|error| {
@@ -298,24 +392,27 @@ impl LocalStore {
                                 io::ErrorKind::InvalidData,
                                 format!("bad next_chunk for `{table_name}`: {error}"),
                             )
-                        })
-                        .map(|stored_next| stored_next.max(discovered_next));
+                        })?
+                        .max(discovered_next);
+                    self.set_next_chunk_counter(table_name, parsed)?;
+                    return Ok(parsed);
                 }
             }
         }
+        self.set_next_chunk_counter(table_name, discovered_next)?;
         Ok(discovered_next)
     }
 
     /// Reads all current live records from a table using the generated `.tenb` cache.
     pub fn read_table(&self, schema: &DatabaseSchema, table_name: &str) -> io::Result<Vec<Record>> {
-        let cache = self.ensure_tenb_current(schema, table_name)?;
+        let cache = self.ensure_tenb_snapshot(schema, table_name)?;
         let table = schema
             .table(table_name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
 
         let mut rows = Vec::with_capacity(cache.rows.len());
-        for entry in cache.rows {
-            rows.push(self.read_row_pointer(table, &entry.ptr)?);
+        for entry in &cache.rows {
+            rows.push(self.read_row_entry(table, entry)?);
         }
         Ok(rows)
     }
@@ -327,14 +424,14 @@ impl LocalStore {
         table_name: &str,
         id: &str,
     ) -> io::Result<Option<Record>> {
-        let cache = self.ensure_tenb_current(schema, table_name)?;
+        let cache = self.ensure_tenb_snapshot(schema, table_name)?;
         let table = schema
             .table(table_name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
         let Some(entry) = row_entry_by_id(&cache, id) else {
             return Ok(None);
         };
-        self.read_row_pointer(table, &entry.ptr).map(Some)
+        self.read_row_entry(table, entry).map(Some)
     }
 
     /// Reads rows by a declared lookup field. Unique lookup callers should use the first item.
@@ -345,7 +442,7 @@ impl LocalStore {
         field_name: &str,
         key: &str,
     ) -> io::Result<Vec<Record>> {
-        let cache = self.ensure_tenb_current(schema, table_name)?;
+        let cache = self.ensure_tenb_snapshot(schema, table_name)?;
         let table = schema
             .table(table_name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
@@ -363,7 +460,7 @@ impl LocalStore {
         let mut rows = Vec::new();
         for lookup_entry in lookup_entries_by_key(&cache, field_name, key) {
             if let Some(row_entry) = row_entry_by_id(&cache, &lookup_entry.id) {
-                rows.push(self.read_row_pointer(table, &row_entry.ptr)?);
+                rows.push(self.read_row_entry(table, row_entry)?);
             }
         }
         Ok(rows)
@@ -407,20 +504,20 @@ impl LocalStore {
         limit: usize,
         offset: usize,
     ) -> io::Result<Vec<Record>> {
-        let cache = self.ensure_tenb_current(schema, table_name)?;
+        let cache = self.ensure_tenb_snapshot(schema, table_name)?;
         let table = schema
             .table(table_name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
         let mut rows = Vec::new();
         for entry in cache.rows.iter().skip(offset).take(limit) {
-            rows.push(self.read_row_pointer(table, &entry.ptr)?);
+            rows.push(self.read_row_entry(table, entry)?);
         }
         Ok(rows)
     }
 
     /// Counts current live rows in one table.
     pub fn count_table(&self, schema: &DatabaseSchema, table_name: &str) -> io::Result<usize> {
-        let cache = self.ensure_tenb_current(schema, table_name)?;
+        let cache = self.ensure_tenb_snapshot(schema, table_name)?;
         Ok(cache.rows.len())
     }
 
@@ -432,7 +529,7 @@ impl LocalStore {
         field_name: &str,
         key: &str,
     ) -> io::Result<usize> {
-        let cache = self.ensure_tenb_current(schema, table_name)?;
+        let cache = self.ensure_tenb_snapshot(schema, table_name)?;
         let table = schema
             .table(table_name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
@@ -487,10 +584,11 @@ impl LocalStore {
             version: TENB_BINARY_VERSION,
             table: table.name().to_owned(),
             schema_hash: schema.schema_hash(),
-            source_hash: scan.source_hash,
+            source_hash: scan.source_hash.clone(),
             rows,
             lookups,
         };
+        self.remember_table_records(table.name(), scan.live.iter())?;
         self.write_tenb_cache(table.name(), &cache)?;
         Ok(cache)
     }
@@ -501,13 +599,22 @@ impl LocalStore {
         schema: &DatabaseSchema,
         table_name: &str,
     ) -> io::Result<TenbCache> {
+        self.ensure_tenb_snapshot(schema, table_name)
+            .map(|cache| cache.as_ref().clone())
+    }
+
+    fn ensure_tenb_snapshot(
+        &self,
+        schema: &DatabaseSchema,
+        table_name: &str,
+    ) -> io::Result<Arc<TenbCache>> {
         let table = schema
             .table(table_name)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
         let path = self.tenb_path(table.name());
         if let Some(cache) = self.cached_tenb(table.name(), &schema.schema_hash())? {
             if !path.exists() {
-                self.write_tenb_cache(table.name(), &cache)?;
+                self.write_tenb_cache(table.name(), cache.as_ref())?;
             }
             return Ok(cache);
         }
@@ -518,18 +625,31 @@ impl LocalStore {
                 && cache.table == table.name()
                 && cache.schema_hash == schema.schema_hash()
             {
-                self.remember_tenb_cache(cache.clone())?;
-                return Ok(cache);
+                return self.remember_tenb_cache(cache);
             }
         }
         self.rebuild_tenb(schema, table_name)
+            .and_then(|cache| self.remember_tenb_cache(cache))
     }
 
     fn ensure_table_layout(&self, table: &TableSchema, _schema_hash: &str) -> io::Result<()> {
+        let layout_key = (table.name().to_owned(), table.signature());
+        if self
+            .layout_cache
+            .read()
+            .map_err(|_| io::Error::other("layout cache lock poisoned"))?
+            .contains(&layout_key)
+        {
+            return Ok(());
+        }
         fs::create_dir_all(self.table_dir(table.name()))?;
         for path in ten_files_in_read_order(&self.table_dir(table.name()))? {
             verify_header(table, &path)?;
         }
+        self.layout_cache
+            .write()
+            .map_err(|_| io::Error::other("layout cache lock poisoned"))?
+            .insert(layout_key);
         Ok(())
     }
 
@@ -551,7 +671,7 @@ impl LocalStore {
             ));
             out.push_str(&format!(
                 "chunks = [{}]\n",
-                chunk_segments_toml(&self.table_dir(table.name()))?
+                chunk_segments_toml_for_next(self.next_chunk_counter(table.name())?)?
             ));
             out.push_str(&format!(
                 "header = \"{}\"\n\n",
@@ -601,11 +721,18 @@ impl LocalStore {
     }
 
     fn read_row_pointer(&self, table: &TableSchema, ptr: &RowPointer) -> io::Result<Record> {
-        let path = self.table_dir(table.name()).join(&ptr.chunk_name);
-        let mut file = File::open(path)?;
-        file.seek(SeekFrom::Start(ptr.offset))?;
-        let mut bytes = vec![0; ptr.len as usize];
-        file.read_exact(&mut bytes)?;
+        let chunk = self.read_chunk(table.name(), &ptr.chunk_name)?;
+        let start = ptr.offset as usize;
+        let end = start.checked_add(ptr.len as usize).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "row pointer offset overflow")
+        })?;
+        if end > chunk.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "row pointer extends past chunk",
+            ));
+        }
+        let mut bytes = chunk[start..end].to_vec();
         if matches!(bytes.last(), Some(b'\n')) {
             bytes.pop();
         }
@@ -620,40 +747,23 @@ impl LocalStore {
         }
     }
 
+    fn read_row_entry(&self, table: &TableSchema, entry: &TenbRowEntry) -> io::Result<Record> {
+        if let Some(record) = self.cached_record(table.name(), &entry.id)? {
+            return Ok(record);
+        }
+        let record = self.read_row_pointer(table, &entry.ptr)?;
+        self.remember_record(&record)?;
+        Ok(record)
+    }
+
     fn validate_unique_lookup_conflicts(
         &self,
         schema: &DatabaseSchema,
         table: &TableSchema,
         record: &Record,
-    ) -> io::Result<TenbCache> {
-        let id = record_id(record)?;
-        let cache = self.ensure_tenb_current(schema, table.name())?;
-        for lookup in table
-            .lookup_specs_with_implicit_id()
-            .into_iter()
-            .filter(|lookup| lookup.unique())
-        {
-            let value = record.fields().get(lookup.field_name()).ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("missing lookup field `{}`", lookup.field_name()),
-                )
-            })?;
-            let key = value_to_lookup_key(value);
-            if let Some(conflict) = lookup_entries_by_key(&cache, lookup.field_name(), &key).first()
-                && conflict.id != id
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!(
-                        "unique lookup `{}` key `{}` is already used by row `{}`",
-                        lookup.field_name(),
-                        key,
-                        conflict.id
-                    ),
-                ));
-            }
-        }
+    ) -> io::Result<Arc<TenbCache>> {
+        let cache = self.ensure_tenb_snapshot(schema, table.name())?;
+        validate_put_unique_lookup_conflicts(table, cache.as_ref(), record)?;
         Ok(cache)
     }
 
@@ -661,37 +771,22 @@ impl LocalStore {
         &self,
         table: &TableSchema,
         append: TenbAppend<'_>,
-    ) -> io::Result<TenbCache> {
+    ) -> io::Result<Arc<TenbCache>> {
         let TenbAppend {
             operation,
             record,
             ptr,
             chunk_bytes,
-            mut cache,
+            cache,
             schema_hash,
         } = append;
+        let mut cache = cache.as_ref().clone();
         let id = record_id(record)?;
         cache.rows.retain(|entry| entry.id != id);
         cache.lookups.retain(|entry| entry.id != id);
 
         if operation == Operation::Put {
-            cache.rows.push(TenbRowEntry {
-                id: id.clone(),
-                ptr: ptr.clone(),
-            });
-            for lookup in table.lookup_specs_with_implicit_id() {
-                let value = record.fields().get(lookup.field_name()).ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("missing lookup field `{}`", lookup.field_name()),
-                    )
-                })?;
-                cache.lookups.push(TenbLookupEntry {
-                    field_name: lookup.field_name().to_owned(),
-                    key: value_to_lookup_key(value),
-                    id: id.clone(),
-                });
-            }
+            apply_put_to_cache(table, &mut cache, record, ptr.clone())?;
         }
 
         sort_tenb_entries(&mut cache.rows, &mut cache.lookups);
@@ -706,20 +801,168 @@ impl LocalStore {
         cache.table = table.name().to_owned();
         cache.schema_hash = schema_hash;
 
-        self.write_tenb_cache(table.name(), &cache)?;
+        let cache = self.write_tenb_cache(table.name(), &cache)?;
+        match operation {
+            Operation::Put => self.remember_record(record)?,
+            Operation::Delete => self.forget_record(table.name(), &id)?,
+        }
         Ok(cache)
     }
 
-    fn write_tenb_cache(&self, table_name: &str, cache: &TenbCache) -> io::Result<()> {
+    fn append_many_with_mode(
+        &self,
+        schema: &DatabaseSchema,
+        operations: &[AppendOperation],
+        mode: AppendMode,
+    ) -> io::Result<Vec<AppendResult>> {
+        let Some(first) = operations.first() else {
+            return Ok(Vec::new());
+        };
+        self.ensure_workspace_layout()?;
+        let table = schema
+            .table(first.record.table())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
+        let writer = self.table_writer(table.name())?;
+        let _writer_guard = writer
+            .lock()
+            .map_err(|_| io::Error::other("table writer lock poisoned"))?;
+        self.ensure_table_layout(table, &schema.schema_hash())?;
+
+        let snapshot = self.ensure_tenb_snapshot(schema, table.name())?;
+        let mut cache = snapshot.as_ref().clone();
+        let tx_start = self.next_tx_id()?;
+        let chunk_counter = self.next_chunk_counter(table.name())?;
+        let chunk_relative_path = chunk_path(chunk_counter)?;
+        let chunk_name = chunk_path_to_name(&chunk_relative_path)?;
+        let chunk_path = self.table_dir(table.name()).join(&chunk_relative_path);
+        if let Some(parent) = chunk_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let schema_hash = schema.schema_hash();
+        let preamble = encode_ten_preamble(table, &schema_hash);
+        let mut chunk_bytes = Vec::new();
+        chunk_bytes.extend_from_slice(preamble.as_bytes());
+        let mut offset = preamble.len() as u64;
+        let mut results = Vec::with_capacity(operations.len());
+
+        for (index, append) in operations.iter().enumerate() {
+            if append.record.table() != table.name() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "batch append operations must all belong to the same table",
+                ));
+            }
+            let id = record_id(&append.record)?;
+            if mode == AppendMode::InsertOnly && row_entry_by_id(&cache, &id).is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("row `{}` already exists in `{}`", id, table.name()),
+                ));
+            }
+            if append.operation == Operation::Put {
+                validate_put_unique_lookup_conflicts(table, &cache, &append.record)?;
+            }
+
+            let tx_id = tx_start + index as u64;
+            let line = encode_ten_operation(table, append.operation, tx_id, &append.record)
+                .map_err(format_error_to_io)?;
+            let bytes_written = (line.len() + 1) as u64;
+            chunk_bytes.extend_from_slice(line.as_bytes());
+            chunk_bytes.push(b'\n');
+            let ptr = RowPointer {
+                chunk_name: chunk_name.clone(),
+                offset,
+                len: bytes_written as u32,
+                tx_id,
+            };
+            apply_operation_to_cache(table, &mut cache, append.operation, &append.record, ptr)?;
+            results.push(AppendResult {
+                tx_id,
+                operation: append.operation,
+                bytes_written,
+            });
+            offset = offset.saturating_add(bytes_written);
+        }
+
+        sort_tenb_entries(&mut cache.rows, &mut cache.lookups);
+        validate_unique_lookups(table, &cache.lookups)?;
+        let mut hash_bytes = Vec::with_capacity(chunk_name.len() + 1 + chunk_bytes.len());
+        hash_bytes.extend_from_slice(chunk_name.as_bytes());
+        hash_bytes.push(0);
+        hash_bytes.extend_from_slice(&chunk_bytes);
+        cache.source_hash = extend_source_hash(&cache.source_hash, &hash_bytes)?;
+        cache.version = TENB_BINARY_VERSION;
+        cache.table = table.name().to_owned();
+        cache.schema_hash = schema_hash;
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&chunk_path)?;
+        file.write_all(&chunk_bytes)?;
+        self.remember_chunk(table.name(), &chunk_name, chunk_bytes)?;
+        self.write_tenb_cache(table.name(), &cache)?;
+        for append in operations {
+            let id = record_id(&append.record)?;
+            match append.operation {
+                Operation::Put => self.remember_record(&append.record)?,
+                Operation::Delete => self.forget_record(table.name(), &id)?,
+            }
+        }
+        let next_tx = tx_start + operations.len() as u64;
+        self.set_next_tx_id(next_tx)?;
+        self.set_next_chunk_counter(table.name(), chunk_counter.saturating_add(1))?;
+        self.write_metadata(schema, next_tx)?;
+
+        Ok(results)
+    }
+
+    fn write_tenb_cache(&self, table_name: &str, cache: &TenbCache) -> io::Result<Arc<TenbCache>> {
         let path = self.tenb_path(table_name);
         let tmp = path.with_extension("tenb.tmp");
         fs::write(&tmp, encode_tenb_cache(cache))?;
         fs::rename(tmp, path)?;
-        self.remember_tenb_cache(cache.clone())?;
+        self.remember_tenb_cache(cache.clone())
+    }
+
+    fn read_chunk(&self, table_name: &str, chunk_name: &str) -> io::Result<Arc<Vec<u8>>> {
+        let key = (table_name.to_owned(), chunk_name.to_owned());
+        if let Some(chunk) = self
+            .chunk_cache
+            .read()
+            .map_err(|_| io::Error::other("chunk cache lock poisoned"))?
+            .get(&key)
+            .cloned()
+        {
+            return Ok(chunk);
+        }
+
+        let path = self.table_dir(table_name).join(chunk_name);
+        let bytes = Arc::new(fs::read(path)?);
+        self.chunk_cache
+            .write()
+            .map_err(|_| io::Error::other("chunk cache lock poisoned"))?
+            .insert(key, Arc::clone(&bytes));
+        Ok(bytes)
+    }
+
+    fn remember_chunk(&self, table_name: &str, chunk_name: &str, bytes: Vec<u8>) -> io::Result<()> {
+        self.chunk_cache
+            .write()
+            .map_err(|_| io::Error::other("chunk cache lock poisoned"))?
+            .insert(
+                (table_name.to_owned(), chunk_name.to_owned()),
+                Arc::new(bytes),
+            );
         Ok(())
     }
 
-    fn cached_tenb(&self, table_name: &str, schema_hash: &str) -> io::Result<Option<TenbCache>> {
+    fn cached_tenb(
+        &self,
+        table_name: &str,
+        schema_hash: &str,
+    ) -> io::Result<Option<Arc<TenbCache>>> {
         let guard = self
             .tenb_cache
             .read()
@@ -728,16 +971,97 @@ impl LocalStore {
             (cache.version == TENB_BINARY_VERSION
                 && cache.table == table_name
                 && cache.schema_hash == schema_hash)
-                .then(|| cache.clone())
+                .then(|| Arc::clone(cache))
         }))
     }
 
-    fn remember_tenb_cache(&self, cache: TenbCache) -> io::Result<()> {
+    fn remember_tenb_cache(&self, cache: TenbCache) -> io::Result<Arc<TenbCache>> {
+        let cache = Arc::new(cache);
         let mut guard = self
             .tenb_cache
             .write()
             .map_err(|_| io::Error::other("tenb cache lock poisoned"))?;
-        guard.insert(cache.table.clone(), cache);
+        guard.insert(cache.table.clone(), Arc::clone(&cache));
+        Ok(cache)
+    }
+
+    fn table_writer(&self, table_name: &str) -> io::Result<Arc<Mutex<()>>> {
+        if let Some(writer) = self
+            .table_writers
+            .read()
+            .map_err(|_| io::Error::other("table writers lock poisoned"))?
+            .get(table_name)
+            .cloned()
+        {
+            return Ok(writer);
+        }
+
+        let mut guard = self
+            .table_writers
+            .write()
+            .map_err(|_| io::Error::other("table writers lock poisoned"))?;
+        Ok(Arc::clone(
+            guard
+                .entry(table_name.to_owned())
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        ))
+    }
+
+    fn set_next_tx_id(&self, next_tx: u64) -> io::Result<()> {
+        *self
+            .next_tx_cache
+            .write()
+            .map_err(|_| io::Error::other("next tx cache lock poisoned"))? = Some(next_tx);
+        Ok(())
+    }
+
+    fn set_next_chunk_counter(&self, table_name: &str, next_chunk: u64) -> io::Result<()> {
+        self.next_chunk_cache
+            .write()
+            .map_err(|_| io::Error::other("next chunk cache lock poisoned"))?
+            .insert(table_name.to_owned(), next_chunk);
+        Ok(())
+    }
+
+    fn cached_record(&self, table_name: &str, id: &str) -> io::Result<Option<Record>> {
+        Ok(self
+            .row_cache
+            .read()
+            .map_err(|_| io::Error::other("row cache lock poisoned"))?
+            .get(&(table_name.to_owned(), id.to_owned()))
+            .cloned())
+    }
+
+    fn remember_record(&self, record: &Record) -> io::Result<()> {
+        let id = record_id(record)?;
+        self.row_cache
+            .write()
+            .map_err(|_| io::Error::other("row cache lock poisoned"))?
+            .insert((record.table().to_owned(), id), record.clone());
+        Ok(())
+    }
+
+    fn forget_record(&self, table_name: &str, id: &str) -> io::Result<()> {
+        self.row_cache
+            .write()
+            .map_err(|_| io::Error::other("row cache lock poisoned"))?
+            .remove(&(table_name.to_owned(), id.to_owned()));
+        Ok(())
+    }
+
+    fn remember_table_records<'a>(
+        &self,
+        table_name: &str,
+        records: impl IntoIterator<Item = (&'a String, &'a LiveRow)>,
+    ) -> io::Result<()> {
+        let mut guard = self
+            .row_cache
+            .write()
+            .map_err(|_| io::Error::other("row cache lock poisoned"))?;
+        guard.retain(|(table, _), _| table != table_name);
+        for (id, live) in records {
+            guard.insert((table_name.to_owned(), id.clone()), live.record.clone());
+        }
         Ok(())
     }
 }
@@ -753,8 +1077,14 @@ struct TenbAppend<'a> {
     record: &'a Record,
     ptr: RowPointer,
     chunk_bytes: &'a [u8],
-    cache: TenbCache,
+    cache: Arc<TenbCache>,
     schema_hash: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AppendMode {
+    InsertOnly,
+    Upsert,
 }
 
 #[derive(Debug, Clone)]
@@ -881,6 +1211,88 @@ fn validate_unique_lookups(table: &TableSchema, lookups: &[TenbLookupEntry]) -> 
     Ok(())
 }
 
+fn apply_put_to_cache(
+    table: &TableSchema,
+    cache: &mut TenbCache,
+    record: &Record,
+    ptr: RowPointer,
+) -> io::Result<()> {
+    let id = record_id(record)?;
+    cache.rows.retain(|entry| entry.id != id);
+    cache.lookups.retain(|entry| entry.id != id);
+    cache.rows.push(TenbRowEntry {
+        id: id.clone(),
+        ptr,
+    });
+    for lookup in table.lookup_specs_with_implicit_id() {
+        let value = record.fields().get(lookup.field_name()).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("missing lookup field `{}`", lookup.field_name()),
+            )
+        })?;
+        cache.lookups.push(TenbLookupEntry {
+            field_name: lookup.field_name().to_owned(),
+            key: value_to_lookup_key(value),
+            id: id.clone(),
+        });
+    }
+    Ok(())
+}
+
+fn apply_operation_to_cache(
+    table: &TableSchema,
+    cache: &mut TenbCache,
+    operation: Operation,
+    record: &Record,
+    ptr: RowPointer,
+) -> io::Result<()> {
+    let id = record_id(record)?;
+    match operation {
+        Operation::Put => apply_put_to_cache(table, cache, record, ptr),
+        Operation::Delete => {
+            cache.rows.retain(|entry| entry.id != id);
+            cache.lookups.retain(|entry| entry.id != id);
+            Ok(())
+        }
+    }
+}
+
+fn validate_put_unique_lookup_conflicts(
+    table: &TableSchema,
+    cache: &TenbCache,
+    record: &Record,
+) -> io::Result<()> {
+    let id = record_id(record)?;
+    for lookup in table
+        .lookup_specs_with_implicit_id()
+        .into_iter()
+        .filter(|lookup| lookup.unique())
+    {
+        let value = record.fields().get(lookup.field_name()).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("missing lookup field `{}`", lookup.field_name()),
+            )
+        })?;
+        let key = value_to_lookup_key(value);
+        if let Some(conflict) = lookup_entries_by_key(cache, lookup.field_name(), &key).first()
+            && conflict.id != id
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "unique lookup `{}` key `{}` is already used by row `{}`",
+                    lookup.field_name(),
+                    key,
+                    conflict.id
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn sort_tenb_entries(rows: &mut [TenbRowEntry], lookups: &mut [TenbLookupEntry]) {
     rows.sort_by(|left, right| left.id.cmp(&right.id));
     lookups.sort_by(|left, right| {
@@ -991,13 +1403,10 @@ fn collect_ten_files(dir: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
     Ok(())
 }
 
-fn chunk_segments_toml(table_dir: &Path) -> io::Result<String> {
-    if !table_dir.exists() {
-        return Ok(String::new());
-    }
+fn chunk_segments_toml_for_next(next_chunk: u64) -> io::Result<String> {
     let mut segments = Vec::new();
-    for path in ten_files_in_read_order(table_dir)? {
-        segments.push(relative_chunk_name(table_dir, &path)?);
+    for chunk_counter in 0..next_chunk {
+        segments.push(chunk_path_to_name(&chunk_path(chunk_counter)?)?);
     }
     Ok(segments
         .into_iter()

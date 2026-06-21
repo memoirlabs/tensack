@@ -390,6 +390,122 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
         }
         out.push_str("        }\n");
 
+        out.push_str("\n        pub mod by {\n");
+        emit_by_constructor(&mut out, id_field, true, true);
+        for lookup in &table.lookups {
+            if let Some(field) = table
+                .fields
+                .iter()
+                .find(|field| field.name == lookup.field_name)
+            {
+                emit_by_constructor(&mut out, field, false, lookup.unique);
+            }
+        }
+        out.push_str("        }\n");
+
+        out.push_str("\n        #[derive(Debug, Clone, PartialEq)]\n");
+        out.push_str("        pub struct OneSelector {\n");
+        out.push_str("            inner: tensack::GetOne,\n");
+        out.push_str("        }\n\n");
+        out.push_str("        impl tensack::GetRequest for OneSelector {\n");
+        out.push_str("            type Output = Option<Row>;\n\n");
+        out.push_str("            fn into_plan(self) -> Result<tensack::PlanEnvelope, tensack::TensackError> {\n");
+        out.push_str("                Ok(self.inner.into_plan())\n");
+        out.push_str("            }\n\n");
+        out.push_str("            fn from_outcome(outcome: tensack::PlanOutcome) -> Result<Self::Output, tensack::TensackError> {\n");
+        out.push_str("                match tensack::GetOne::from_outcome(outcome)? {\n");
+        out.push_str("                    Some(record) => Ok(Some(Row::from_record(&record)?)),\n");
+        out.push_str("                    None => Ok(None),\n");
+        out.push_str("                }\n");
+        out.push_str("            }\n");
+        out.push_str("        }\n");
+
+        out.push_str("\n        #[derive(Debug, Clone, PartialEq)]\n");
+        out.push_str("        pub struct ManySelector {\n");
+        out.push_str("            inner: tensack::GetMany,\n");
+        out.push_str("        }\n\n");
+        out.push_str("        impl ManySelector {\n");
+        out.push_str("            pub fn limit(mut self, limit: usize) -> Self {\n");
+        out.push_str("                self.inner = self.inner.limit(limit);\n");
+        out.push_str("                self\n");
+        out.push_str("            }\n\n");
+        out.push_str("            pub fn cursor(mut self, cursor: impl Into<String>) -> Self {\n");
+        out.push_str("                self.inner = self.inner.cursor(cursor);\n");
+        out.push_str("                self\n");
+        out.push_str("            }\n");
+        out.push_str("        }\n\n");
+        out.push_str("        impl tensack::GetRequest for ManySelector {\n");
+        out.push_str("            type Output = Vec<Row>;\n\n");
+        out.push_str("            fn into_plan(self) -> Result<tensack::PlanEnvelope, tensack::TensackError> {\n");
+        out.push_str("                Ok(self.inner.into_plan())\n");
+        out.push_str("            }\n\n");
+        out.push_str("            fn from_outcome(outcome: tensack::PlanOutcome) -> Result<Self::Output, tensack::TensackError> {\n");
+        out.push_str("                rows_from_records(tensack::GetMany::from_outcome(outcome)?).map_err(tensack::TensackError::from)\n");
+        out.push_str("            }\n");
+        out.push_str("        }\n");
+
+        out.push_str("\n        #[derive(Debug, Clone, PartialEq)]\n");
+        out.push_str("        pub struct PageSelector {\n");
+        out.push_str("            inner: tensack::GetPage,\n");
+        out.push_str("        }\n\n");
+        out.push_str("        impl PageSelector {\n");
+        out.push_str("            pub fn limit(mut self, limit: usize) -> Self {\n");
+        out.push_str("                self.inner = self.inner.limit(limit);\n");
+        out.push_str("                self\n");
+        out.push_str("            }\n\n");
+        out.push_str("            pub fn cursor(mut self, cursor: impl Into<String>) -> Self {\n");
+        out.push_str("                self.inner = self.inner.cursor(cursor);\n");
+        out.push_str("                self\n");
+        out.push_str("            }\n");
+        out.push_str("        }\n\n");
+        out.push_str("        impl tensack::GetRequest for PageSelector {\n");
+        out.push_str("            type Output = (Vec<Row>, Option<String>);\n\n");
+        out.push_str("            fn into_plan(self) -> Result<tensack::PlanEnvelope, tensack::TensackError> {\n");
+        out.push_str("                Ok(self.inner.into_plan())\n");
+        out.push_str("            }\n\n");
+        out.push_str("            fn from_outcome(outcome: tensack::PlanOutcome) -> Result<Self::Output, tensack::TensackError> {\n");
+        out.push_str("                let page = tensack::GetPage::from_outcome(outcome)?;\n");
+        out.push_str("                Ok((rows_from_records(page.rows)?, page.next_cursor))\n");
+        out.push_str("            }\n");
+        out.push_str("        }\n");
+
+        out.push_str("\n        #[derive(Debug, Clone, PartialEq)]\n");
+        out.push_str("        pub struct CountSelector {\n");
+        out.push_str("            inner: tensack::GetCount,\n");
+        out.push_str("        }\n\n");
+        out.push_str("        impl tensack::GetRequest for CountSelector {\n");
+        out.push_str("            type Output = usize;\n\n");
+        out.push_str("            fn into_plan(self) -> Result<tensack::PlanEnvelope, tensack::TensackError> {\n");
+        out.push_str("                Ok(self.inner.into_plan())\n");
+        out.push_str("            }\n\n");
+        out.push_str("            fn from_outcome(outcome: tensack::PlanOutcome) -> Result<Self::Output, tensack::TensackError> {\n");
+        out.push_str("                tensack::GetCount::from_outcome(outcome)\n");
+        out.push_str("            }\n");
+        out.push_str("        }\n");
+
+        out.push_str("\n        pub fn all() -> PageSelector {\n");
+        out.push_str("            PageSelector { inner: tensack::GetPage::new(NAME) }\n");
+        out.push_str("        }\n\n");
+        out.push_str("        pub fn count() -> CountSelector {\n");
+        out.push_str("            CountSelector { inner: tensack::GetCount::table(NAME) }\n");
+        out.push_str("        }\n\n");
+        out.push_str("        pub fn add(row: Row) -> tensack::WriteChange {\n");
+        out.push_str("            tensack::WriteChange::add_record(record_from_row(row))\n");
+        out.push_str("        }\n\n");
+        out.push_str("        pub fn set(row: Row) -> tensack::WriteChange {\n");
+        out.push_str("            tensack::WriteChange::set_record(record_from_row(row))\n");
+        out.push_str("        }\n\n");
+        out.push_str(
+            "        pub fn edit(target: key::Key, patch: Patch) -> tensack::WriteChange {\n",
+        );
+        out.push_str("            tensack::WriteChange::edit(NAME, target.lookup, target.value, patch.fields)\n");
+        out.push_str("        }\n\n");
+        out.push_str("        pub fn remove(target: key::Key) -> tensack::WriteChange {\n");
+        out.push_str(
+            "            tensack::WriteChange::remove(NAME, target.lookup, target.value)\n",
+        );
+        out.push_str("        }\n");
+
         out.push_str("\n        pub struct TableHandle<'a> {\n");
         out.push_str("            db: &'a tensack::TensackDatabase,\n");
         out.push_str("        }\n\n");
@@ -513,6 +629,12 @@ pub fn emit_raw_rust(ir: &SchemaIr) -> String {
         out.push_str("            }\n");
         out.push_str("        }\n");
 
+        out.push_str("\n        fn record_from_row(row: Row) -> tensack::Record {\n");
+        out.push_str(
+            "            row.into_record().expect(\"generated rows only contain schema fields\")\n",
+        );
+        out.push_str("        }\n");
+
         out.push_str("\n        fn rows_from_records(records: Vec<tensack::Record>) -> Result<Vec<Row>, tensack::SchemaError> {\n");
         out.push_str("            let mut rows = Vec::with_capacity(records.len());\n");
         out.push_str("            for record in records {\n");
@@ -552,6 +674,30 @@ fn emit_key_constructor(out: &mut String, field: &FieldIr, is_id: bool) {
         rust_value_expr(field, "value")
     ));
     out.push_str("                }\n");
+    out.push_str("            }\n");
+}
+
+fn emit_by_constructor(out: &mut String, field: &FieldIr, is_id: bool, unique: bool) {
+    let name = if is_id { "id" } else { &field.name };
+    let selector = if unique {
+        "OneSelector"
+    } else {
+        "ManySelector"
+    };
+    let inner = if unique { "GetOne" } else { "GetMany" };
+    out.push_str(&format!(
+        "            pub fn {}(value: {}) -> super::{} {{\n",
+        name,
+        rust_param_type(field),
+        selector
+    ));
+    out.push_str(&format!(
+        "                super::{} {{ inner: tensack::{}::new(super::NAME, \"{}\", {}) }}\n",
+        selector,
+        inner,
+        name,
+        rust_value_expr(field, "value")
+    ));
     out.push_str("            }\n");
 }
 
@@ -1064,10 +1210,11 @@ mod tests {
         assert!(code.contains("pub account_id: String"));
         assert!(code.contains("pub trait TensackGeneratedTables"));
         assert!(code.contains("pub struct TableHandle"));
-        assert!(code.contains("pub fn upsert(&self, row: Row)"));
-        assert!(code.contains("pub fn patch(&self, target: key::Key, patch: Patch)"));
-        assert!(code.contains("pub fn scan(&self) -> ScanBuilder"));
-        assert!(code.contains("pub fn insert(&self, row: Row)"));
+        assert!(code.contains("pub mod by"));
+        assert!(code.contains("pub fn add(row: Row)"));
+        assert!(code.contains("pub fn set(row: Row)"));
+        assert!(code.contains("pub fn edit(target: key::Key, patch: Patch)"));
+        assert!(code.contains("pub fn all() -> PageSelector"));
         assert!(code.contains("pub fn account_id(&self, value: impl Into<String>)"));
         assert!(code.contains("pub fn email(&self, value: impl Into<String>)"));
         assert!(!code.contains("pub fn insert(db: &tensack::TensackDatabase, row: Row)"));

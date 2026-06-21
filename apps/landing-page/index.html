@@ -518,7 +518,7 @@
               <article class="card">
                 <span class="path">packages/tensack</span>
                 <h3>Runtime API</h3>
-                <p>The public `TensackDatabase` API for init, insert, put, delete, get, lookup, and cache rebuilds.</p>
+                <p>The public `TensackDatabase` API for init, `get` selectors, `write` changes, and cache rebuilds.</p>
               </article>
               <article class="card">
                 <span class="path">packages/tensack-cli</span>
@@ -639,28 +639,28 @@ file   = reverse_base36(local, 3)</code></pre>
 );
 
 db.init()?;
-db.insert(&row)?;
-db.put(&replacement)?;
-db.delete_by_id("messages", "m1")?;
+db.write(change::add(row))?;
+db.write(change::set(replacement))?;
+db.write(change::remove_id("messages", "m1"))?;
 
-let row = db.get("messages", "m1")?;
-let rows = db.get_many_by(
+let row = db.get(selector::id("messages", "m1"))?;
+let rows = db.get(selector::many(
     "messages",
     "conversation_id",
     "cv1",
-)?;</code></pre>
+))?;</code></pre>
               <div class="card">
                 <h3>Target generated API</h3>
-                <p>The public direction is table-first and generated from schema.</p>
+                <p>The public direction is `get` / `watch` / `write` with schema-generated values.</p>
                 <ul>
-                  <li>`db.&lt;table&gt;.insert()`</li>
-                  <li>`db.&lt;table&gt;.upsert()`</li>
-                  <li>`db.&lt;table&gt;.patch()`</li>
-                  <li>`db.&lt;table&gt;.remove()`</li>
-                  <li>`db.&lt;table&gt;.get.&lt;unique_lookup&gt;()`</li>
-                  <li>`db.&lt;table&gt;.find.&lt;lookup&gt;()`</li>
-                  <li>`db.&lt;table&gt;.scan()`</li>
-                  <li>`db.&lt;table&gt;.count()`</li>
+                  <li>`db.get(messages::by::id("m1"))`</li>
+                  <li>`db.get(messages::by::conversation_id("cv1"))`</li>
+                  <li>`db.get(messages::all().limit(100))`</li>
+                  <li>`db.get(messages::count())`</li>
+                  <li>`db.write(messages::add(row))`</li>
+                  <li>`db.write(messages::edit(target, patch))`</li>
+                  <li>`db.write(messages::remove(target))`</li>
+                  <li>`db.watch(selector, callback)` is planned for subscriptions.</li>
                 </ul>
               </div>
               <div class="card">
@@ -695,7 +695,7 @@ let rows = db.get_many_by(
                   <li>Reverse-sorted 2-folder plus 3-file chunk naming.</li>
                   <li>`tensack.toml` metadata with `next_tx` and `next_chunk`.</li>
                   <li>Generated `.tenb` lookup cache rebuilds.</li>
-                  <li>Rust API for basic CRUD and lookup reads.</li>
+                  <li>Rust API for `get` selectors, `write` changes, and lookup-backed state access.</li>
                 </ul>
               </article>
               <article class="card">

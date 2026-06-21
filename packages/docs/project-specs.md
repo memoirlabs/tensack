@@ -6,7 +6,7 @@ This is the consolidated map of public design/specification documents and how th
 
 - [README.md](../../README.md) — current scope, package layout, and build assumptions.
 - [book/README.md](../../book/README.md) — internal design book for philosophy, specs, and current direction.
-- [book/13-sqlite-mapping.md](../../book/13-sqlite-mapping.md) — canonical SQLite-to-Tensack syntax mapping.
+- [book/13-sqlite-mapping.md](../../book/13-sqlite-mapping.md) — canonical SQLite-to-Tensack `get`/`watch`/`write` mapping.
 - [AGENTS.md](../../AGENTS.md) — working constraints for this repository and the source-of-truth model for implementation.
 - [packages/docs/commands.md](commands.md) — CLI contract stub (currently only `--version`, `help`).
 - [packages/docs/file-format.md](file-format.md) — file format scope stub.

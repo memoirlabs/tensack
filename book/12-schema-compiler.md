@@ -41,16 +41,9 @@ Generated Rust currently includes:
 - `Row::from_record`
 - `Patch`
 - unique lookup keys
-- table handle
-- `insert`
-- `upsert`
-- `put` compatibility method
-- `patch`
-- `remove`
-- `get`
-- `find`
-- `scan`
-- `count`
+- generated `by` selectors for `db.get(...)`
+- generated `all` and `count` selectors
+- generated `add`, `set`, `edit`, and `remove` changes for `db.write(...)`
 - table extension trait
 
 ## Next Compiler Work
@@ -59,4 +52,3 @@ Generated Rust currently includes:
 - normal build integration path
 - final generated API naming pass
 - less stringly runtime glue where Rust types can carry the information
-

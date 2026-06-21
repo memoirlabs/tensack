@@ -3,28 +3,57 @@
 The generated API is the intended user-facing API.
 
 It should hide storage details and avoid generic table/lookup strings in normal
-application code.
+application code. The top-level product verbs are:
+
+```txt
+db.get(selector)
+db.watch(selector)
+db.write(change)
+```
 
 For a direct comparison between common SQLite statements and the generated
 Tensack shape, see [SQLite Mapping](13-sqlite-mapping.md).
 
-## Operations
+## Selectors
 
 ```txt
-db.<table>.insert()
-db.<table>.upsert()
-db.<table>.patch()
-db.<table>.remove()
-
-db.<table>.get.<unique_lookup>()
-db.<table>.find.<lookup>()
-db.<table>.scan()
-db.<table>.count()
+<table>::by::<unique_lookup>(value)  -> one row
+<table>::by::<lookup>(value)         -> many rows
+<table>::all().limit(n)              -> page of rows
+<table>::count()                     -> row count
 ```
 
-## Writes
+Examples:
 
-### insert
+```rust
+db.get(users::by::id("u1"))?;
+db.get(users::by::email("a@test.com"))?;
+db.get(messages::by::conversation_id("cv1"))?;
+db.get(messages::all().limit(100))?;
+db.get(messages::count())?;
+```
+
+## Changes
+
+```txt
+<table>::add(row)                 -> create one row
+<table>::set(row)                 -> create or replace one row
+<table>::edit(target, patch)      -> partially change one row
+<table>::remove(target)           -> remove one row
+```
+
+Examples:
+
+```rust
+db.write(messages::add(row))?;
+db.write(messages::set(row))?;
+db.write(messages::edit(messages::key::id("m1"), patch))?;
+db.write(messages::remove(messages::key::id("m1")))?;
+```
+
+## Semantics
+
+### add
 
 Creates a new row.
 
@@ -32,7 +61,7 @@ Creates a new row.
 - Fails if id already exists.
 - Fails on unique lookup conflict.
 
-### upsert
+### set
 
 Creates or fully replaces a row.
 
@@ -41,10 +70,7 @@ Creates or fully replaces a row.
 - Replaces if id exists.
 - Fails on unique lookup conflict with another row.
 
-The internal/runtime compatibility name `put` can remain, but generated public
-APIs should use `upsert`.
-
-### patch
+### edit
 
 Partially updates one row.
 
@@ -62,41 +88,23 @@ Deletes one row.
 - Resolves target row.
 - Writes a tombstone by id internally.
 
-## Reads
-
 ### get
 
-Reads one row through a unique lookup.
+Gets current state once.
 
-```txt
-db.users.get.id("u1")
-db.users.get.email("a@test.com")
-```
+- unique selectors return zero or one row
+- lookup selectors return many rows
+- `all` returns a page
+- `count` returns a number
 
-### find
+### watch
 
-Reads many rows through a lookup.
-
-```txt
-db.messages.find.conversation_id("cv1")
-```
-
-### scan
-
-Reads live rows from a table.
-
-Must support limit and cursor. Ordering is not stable until explicitly defined.
-
-### count
-
-Counts live rows for a table or lookup.
+Watches current state as it changes. This is the planned subscription surface.
+Do not claim `watch` is implemented until the runtime can actually keep
+subscribers updated.
 
 ## What Not To Do
 
-Do not make the main generated API look like:
-
-```rust
-db.get_by("messages", "conversation_id", "cv1")
-```
-
-That can exist as compatibility/runtime glue, but it is not the product API.
+Do not add a second query language, string selector API, or table-command API as
+the main product surface. Product code should pass generated values into
+`db.get(...)`, future `db.watch(...)`, and `db.write(...)`.

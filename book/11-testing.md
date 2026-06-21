@@ -43,12 +43,10 @@ Use temporary directories and real store/runtime calls:
 
 - open database
 - initialize layout
-- insert rows
-- read by id
-- read by lookup
-- patch rows
-- remove rows
-- scan and count
+- write add/set/edit/remove changes
+- get by id selector
+- get by lookup selector
+- get page and count selectors
 - rebuild caches
 - verify unique lookup conflicts
 
@@ -57,7 +55,7 @@ Use temporary directories and real store/runtime calls:
 Use for public behavior:
 
 - CLI output
-- file format compatibility
+- file format stability
 - generated API behavior once stable
 
 ### Snapshot Tests
@@ -78,4 +76,3 @@ cargo check --workspace --all-targets
 cargo test --workspace --all-targets
 cargo clippy --workspace --all-targets -- -D warnings
 ```
-

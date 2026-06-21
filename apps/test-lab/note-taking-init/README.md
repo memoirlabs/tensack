@@ -20,10 +20,20 @@ The runtime example also writes generated Rust schema output under
 `target/test-lab/note-taking-init/generated/` for inspection and initializes a
 local database under `target/test-lab/note-taking-init/notes-db/`.
 
+By default, the binary prints only the current user-facing schema and database
+paths. Versioned generated files and storage/index files are kept as internal
+artifacts. Pass `--show-artifacts` when you intentionally want to inspect them.
+
 Run both phases:
 
 ```sh
 cargo run -p note-taking-init -- --reset
+```
+
+Show internal artifacts:
+
+```sh
+cargo run -p note-taking-init -- --reset --show-artifacts
 ```
 
 Run one phase at a time:
@@ -37,6 +47,12 @@ cargo run -p note-taking-init -- --phase v3
 Expected final database shape:
 
 ```txt
+generated/
+  schema.rs
+  artifacts/
+    schema-v1.rs
+    schema-v2.rs
+    schema-v3.rs
 notes-db/
   tensack.toml
   engine/

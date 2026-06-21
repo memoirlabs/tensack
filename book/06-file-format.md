@@ -49,7 +49,8 @@ schema plus `.ten`.
 
 Reserved for optional generated full-text search.
 
-Not required for normal id lookup, declared lookups, CRUD, scan, or count.
+Not required for normal id lookup, declared lookups, `get` selectors, or
+`write` changes.
 
 ## Format Boundary
 
@@ -60,4 +61,3 @@ packages/tensack-format
 ```
 
 It should not know application API decisions.
-

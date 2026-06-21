@@ -32,7 +32,7 @@ The database is composed in `packages/tensack`. CLI behavior lives in `packages/
 The book is the source of truth for current product direction. Start with:
 
 - [Product shape](book/01-product-shape.md) - schema compiler, generated API, plan executor, and local store flow.
-- [Generated API](book/03-generated-api.md) - intended table-first user API.
+- [Generated API](book/03-generated-api.md) - intended `get` / `watch` / `write` user API.
 - [Plan envelope](book/04-plan-envelope.md) - internal execution contract shared by generated APIs, CLI, and admin UI.
 - [SQLite mapping](book/13-sqlite-mapping.md) - how simple SQLite operations map to Tensack syntax without adding SQL.
 
@@ -45,24 +45,21 @@ declared lookup reads, scans, and counts. `.tenx` is reserved for optional
 full-text search and is not required for normal reads.
 
 The current product target is intentionally plain: a tiny local table database
-with CRUD, typed primitive fields, and rebuildable lookup caches. No SQL, no
+with `get` selectors, `write` changes, typed primitive fields, and rebuildable lookup caches. No SQL, no
 chat-specific primary surface, no external database. Simple SQLite-shaped ideas
-map to declared schema lookups and generated table methods, not to a user-authored
-query-string language.
+map to declared selectors and changes, not to a user-authored query-string
+language.
 
-The target public API is table-first and generated from schema:
+The target public API is intentionally tiny:
 
 ```txt
-db.<table>.insert()
-db.<table>.upsert()
-db.<table>.patch()
-db.<table>.remove()
-
-db.<table>.get.<unique_lookup>()
-db.<table>.find.<lookup>()
-db.<table>.scan()
-db.<table>.count()
+db.get(selector)       current state once
+db.watch(selector)     current state kept updated (planned)
+db.write(change)       apply a declared change
 ```
+
+Selectors and changes are generated from schema, for example
+`messages::by::conversation_id("cv1")` or `messages::add(row)`.
 
 Generated Rust table handles now build the internal plan envelope described in
 [book/04-plan-envelope.md](book/04-plan-envelope.md). CLI commands and admin UI
@@ -70,11 +67,34 @@ actions should use that same executor as their surfaces expand. See
 [book/13-sqlite-mapping.md](book/13-sqlite-mapping.md) for the intended mapping
 from common SQLite operations to Tensack syntax.
 
-### Minimal CRUD example
+## Current Benchmarks
+
+Local Criterion run:
+
+```sh
+cargo bench -p tensack-benchmark --bench crud_vs_sqlite
+```
+
+Recent 100-row state-access results on this machine:
+
+| Operation | Tensack | SQLite comparison |
+| --- | ---: | ---: |
+| write add one-by-one | ~40.4 ms | ~27.6 ms disk create |
+| batched write add | ~1.08 ms | ~54 us in-memory transaction |
+| get by id | ~3.26 ms | ~0.42 ms disk select |
+| write edit by id | ~53.9 ms | ~19.1 ms disk update |
+| write remove by id | ~47.9 ms | ~20.0 ms disk delete |
+
+These are early engine benchmarks, not guarantees. They are useful for tracking
+direction: batched appends are already much faster than one-row-at-a-time writes,
+while get/edit/remove still have room to improve.
+
+### Minimal State Example
 
 ```rust
 use tensack::{
     DatabaseSchema, PrimitiveType, Record, TableSchema, TensackDatabase,
+    change, selector,
 };
 
 let mut schema = DatabaseSchema::new();
@@ -90,9 +110,9 @@ let row = Record::new("messages")
     .with_field("body", "hello")
     .unwrap();
 
-db.insert(&row).unwrap();
+db.write(change::add(row)).unwrap();
 
-let found = db.get("messages", "m1").unwrap();
+let found = db.get(selector::id("messages", "m1")).unwrap();
 assert!(found.is_some());
 
 let replacement = Record::new("messages")
@@ -100,6 +120,6 @@ let replacement = Record::new("messages")
     .unwrap()
     .with_field("body", "updated")
     .unwrap();
-db.put(&replacement).unwrap();
-db.delete_by_id("messages", "m1").unwrap();
+db.write(change::set(replacement)).unwrap();
+db.write(change::remove_id("messages", "m1")).unwrap();
 ```

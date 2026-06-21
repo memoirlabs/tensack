@@ -49,7 +49,7 @@ Local storage engine:
 - database directory paths
 - chunk paths
 - appends
-- scans
+- table scans
 - cache rebuilds
 - lookup reads
 
@@ -60,8 +60,8 @@ It should not expose storage internals as the normal app API.
 Composed runtime API:
 
 - `TensackDatabase`
+- `get` and `write` request execution
 - plan executor
-- compatibility methods
 - public re-exports
 
 ### `tensack-schema-compiler`
@@ -90,4 +90,3 @@ crate tensack_core    -> tensack_schema
 ```
 
 Only do this as an intentional rename, not mixed into unrelated behavior work.
-

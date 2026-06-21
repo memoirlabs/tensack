@@ -5,7 +5,8 @@ The plan envelope is the internal operation contract.
 Generated APIs, CLI commands, admin UI actions, and future SDKs should converge
 on this shape before execution.
 
-The plan is not the primary user-facing API.
+The plan is not the primary user-facing API. Users should normally deal in
+`db.get(selector)`, future `db.watch(selector)`, and `db.write(change)`.
 
 ## Shape
 
@@ -25,23 +26,23 @@ The plan is not the primary user-facing API.
 ## Operations
 
 ```txt
-insert
-upsert
-patch
+add
+set
+edit
 remove
 get
-find
-scan
+many
+page
 count
 ```
 
 ## Examples
 
-Insert:
+Add:
 
 ```json
 {
-  "op": "insert",
+  "op": "add",
   "table": "users",
   "value": {
     "id": "u1",
@@ -50,11 +51,11 @@ Insert:
 }
 ```
 
-Find:
+Many:
 
 ```json
 {
-  "op": "find",
+  "op": "many",
   "table": "messages",
   "lookup": "conversation_id",
   "key": { "conversation_id": "cv1" },
@@ -63,11 +64,11 @@ Find:
 }
 ```
 
-Patch:
+Edit:
 
 ```json
 {
-  "op": "patch",
+  "op": "edit",
   "table": "users",
   "lookup": "id",
   "key": { "id": "u1" },
@@ -79,9 +80,9 @@ Patch:
 
 - `table` must exist.
 - `lookup` must exist where required.
-- `get`, `patch`, and `remove` require unique lookup targets.
-- `insert` and `upsert` require full row values.
-- `patch` requires a non-empty partial value.
+- `get`, `edit`, and `remove` require unique lookup targets.
+- `add` and `set` require full row values.
+- `edit` requires a non-empty partial value.
 - Unknown fields are rejected.
 - Values must match schema primitive types.
 - `limit` must be bounded.
@@ -91,17 +92,18 @@ Patch:
 Current runtime has:
 
 ```rust
+GetRequest
+WriteRequest
 PlanOp
 PlanEnvelope
 PlanOutcome
+TensackDatabase::get
+TensackDatabase::write
 TensackDatabase::execute_plan
 ```
-
-Current compatibility APIs route through the plan layer where practical.
 
 Still needed:
 
 - JSON serde for plan envelopes.
 - CLI plan execution.
 - Admin UI plan execution.
-

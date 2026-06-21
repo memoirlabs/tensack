@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tensack::{Record, TensackDatabase};
+use tensack::{Record, TensackDatabase, Value, change};
 
 mod chat_schema {
     use tensack::schema;
@@ -45,7 +45,7 @@ fn main() {
     let convo = Record::new("conversations")
         .with_id("c1")
         .unwrap()
-        .with_field("owner_id", "u1")
+        .with_field("owner_id", Value::Id("u1".to_owned()))
         .unwrap()
         .with_field("title", "Demo chat")
         .unwrap()
@@ -55,18 +55,18 @@ fn main() {
     let message = Record::new("messages")
         .with_id("m1")
         .unwrap()
-        .with_field("conversation_id", "c1")
+        .with_field("conversation_id", Value::Id("c1".to_owned()))
         .unwrap()
-        .with_field("sender_id", "u1")
+        .with_field("sender_id", Value::Id("u1".to_owned()))
         .unwrap()
         .with_field("body", "hello from crude schema macro")
         .unwrap()
         .with_field("created_at", 1_707_000_001_i64)
         .unwrap();
 
-    db.put(&user).unwrap();
-    db.put(&convo).unwrap();
-    db.put(&message).unwrap();
+    db.write(change::set(user)).unwrap();
+    db.write(change::set(convo)).unwrap();
+    db.write(change::set(message)).unwrap();
 
     println!("basic schema example written");
     let _ = fs::remove_dir_all(root);

@@ -21,30 +21,26 @@ future import/export integrations, but they are not the storage engine.
 The user defines a schema. From that schema we generate:
 
 - typed rows
-- table handles
-- lookup methods
+- selectors
+- changes
 - validation metadata
 - runtime plans
 
 The normal path should not be generic stringly typed calls.
 
-### Generated API, simple engine
+### Tiny API, simple engine
 
 Users should call:
 
 ```txt
-db.<table>.insert()
-db.<table>.upsert()
-db.<table>.patch()
-db.<table>.remove()
-
-db.<table>.get.<unique_lookup>()
-db.<table>.find.<lookup>()
-db.<table>.scan()
-db.<table>.count()
+db.get(selector)
+db.watch(selector)
+db.write(change)
 ```
 
-Internally, those calls can become a compact plan envelope. The engine should
+Generated schema code should provide selectors such as
+`messages::by::conversation_id(cv)` and changes such as `messages::add(row)`.
+Internally, those values can become a compact plan envelope. The engine should
 execute plans, not expose storage internals.
 
 ### Storage is not the API
@@ -64,8 +60,9 @@ only when code and tests support it.
 Use obvious names:
 
 - `Value` for row values
-- `upsert`, not `put`, for the generated public API
-- `remove`, not `delete`, for generated table methods
+- `get` for current state once
+- `watch` for live subscriptions once implemented
+- `write` for applying declared changes
 - `schema`, `format`, `store`, `runtime`, `cli`
 
 Names should explain the boundary.

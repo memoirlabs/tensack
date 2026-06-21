@@ -265,6 +265,11 @@ impl PlanEnvelope {
         self
     }
 
+    pub fn with_values(mut self, values: BTreeMap<String, Value>) -> Self {
+        self.value = values;
+        self
+    }
+
     pub fn with_limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
         self
@@ -290,6 +295,357 @@ pub enum PlanOutcome {
     Row(Option<Record>),
     Rows(PlanPage),
     Count(usize),
+}
+
+/// Declarative request for current state.
+pub trait GetRequest {
+    type Output;
+
+    fn into_plan(self) -> Result<PlanEnvelope, TensackError>;
+
+    fn from_outcome(outcome: PlanOutcome) -> Result<Self::Output, TensackError>;
+}
+
+/// Declarative request for a state change.
+pub trait WriteRequest {
+    type Output;
+
+    fn into_plan(self) -> Result<PlanEnvelope, TensackError>;
+
+    fn from_outcome(outcome: PlanOutcome) -> Result<Self::Output, TensackError>;
+}
+
+/// Selector for one row through a unique lookup.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GetOne {
+    plan: PlanEnvelope,
+}
+
+impl GetOne {
+    pub fn new(
+        table: impl Into<String>,
+        lookup: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> Self {
+        let lookup = lookup.into();
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Get, table)
+                .with_lookup(lookup.clone())
+                .with_key(lookup, value),
+        }
+    }
+
+    pub fn into_plan(self) -> PlanEnvelope {
+        self.plan
+    }
+
+    pub fn from_outcome(outcome: PlanOutcome) -> Result<Option<Record>, TensackError> {
+        match outcome {
+            PlanOutcome::Row(row) => Ok(row),
+            _ => Err(PlanError::Invalid("get selector returned non-row outcome".to_owned()).into()),
+        }
+    }
+}
+
+impl GetRequest for GetOne {
+    type Output = Option<Record>;
+
+    fn into_plan(self) -> Result<PlanEnvelope, TensackError> {
+        Ok(self.into_plan())
+    }
+
+    fn from_outcome(outcome: PlanOutcome) -> Result<Self::Output, TensackError> {
+        Self::from_outcome(outcome)
+    }
+}
+
+/// Selector for many rows through a declared lookup.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GetMany {
+    plan: PlanEnvelope,
+}
+
+impl GetMany {
+    pub fn new(
+        table: impl Into<String>,
+        lookup: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> Self {
+        let lookup = lookup.into();
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Find, table)
+                .with_lookup(lookup.clone())
+                .with_key(lookup, value)
+                .with_limit(MAX_PLAN_LIMIT),
+        }
+    }
+
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.plan.limit = Some(limit);
+        self
+    }
+
+    pub fn cursor(mut self, cursor: impl Into<String>) -> Self {
+        self.plan.cursor = Some(cursor.into());
+        self
+    }
+
+    pub fn into_plan(self) -> PlanEnvelope {
+        self.plan
+    }
+
+    pub fn from_outcome(outcome: PlanOutcome) -> Result<Vec<Record>, TensackError> {
+        match outcome {
+            PlanOutcome::Rows(page) => Ok(page.rows),
+            _ => {
+                Err(PlanError::Invalid("get selector returned non-rows outcome".to_owned()).into())
+            }
+        }
+    }
+}
+
+impl GetRequest for GetMany {
+    type Output = Vec<Record>;
+
+    fn into_plan(self) -> Result<PlanEnvelope, TensackError> {
+        Ok(self.into_plan())
+    }
+
+    fn from_outcome(outcome: PlanOutcome) -> Result<Self::Output, TensackError> {
+        Self::from_outcome(outcome)
+    }
+}
+
+/// Selector for a page of table rows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GetPage {
+    plan: PlanEnvelope,
+}
+
+impl GetPage {
+    pub fn new(table: impl Into<String>) -> Self {
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Scan, table),
+        }
+    }
+
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.plan.limit = Some(limit);
+        self
+    }
+
+    pub fn cursor(mut self, cursor: impl Into<String>) -> Self {
+        self.plan.cursor = Some(cursor.into());
+        self
+    }
+
+    pub fn into_plan(self) -> PlanEnvelope {
+        self.plan
+    }
+
+    pub fn from_outcome(outcome: PlanOutcome) -> Result<PlanPage, TensackError> {
+        match outcome {
+            PlanOutcome::Rows(page) => Ok(page),
+            _ => {
+                Err(PlanError::Invalid("get selector returned non-page outcome".to_owned()).into())
+            }
+        }
+    }
+}
+
+impl GetRequest for GetPage {
+    type Output = PlanPage;
+
+    fn into_plan(self) -> Result<PlanEnvelope, TensackError> {
+        Ok(self.into_plan())
+    }
+
+    fn from_outcome(outcome: PlanOutcome) -> Result<Self::Output, TensackError> {
+        Self::from_outcome(outcome)
+    }
+}
+
+/// Selector for a table or lookup count.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GetCount {
+    plan: PlanEnvelope,
+}
+
+impl GetCount {
+    pub fn table(table: impl Into<String>) -> Self {
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Count, table),
+        }
+    }
+
+    pub fn lookup(
+        table: impl Into<String>,
+        lookup: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> Self {
+        let lookup = lookup.into();
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Count, table)
+                .with_lookup(lookup.clone())
+                .with_key(lookup, value),
+        }
+    }
+
+    pub fn into_plan(self) -> PlanEnvelope {
+        self.plan
+    }
+
+    pub fn from_outcome(outcome: PlanOutcome) -> Result<usize, TensackError> {
+        match outcome {
+            PlanOutcome::Count(count) => Ok(count),
+            _ => {
+                Err(PlanError::Invalid("get selector returned non-count outcome".to_owned()).into())
+            }
+        }
+    }
+}
+
+impl GetRequest for GetCount {
+    type Output = usize;
+
+    fn into_plan(self) -> Result<PlanEnvelope, TensackError> {
+        Ok(self.into_plan())
+    }
+
+    fn from_outcome(outcome: PlanOutcome) -> Result<Self::Output, TensackError> {
+        Self::from_outcome(outcome)
+    }
+}
+
+/// Declarative state change.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WriteChange {
+    plan: PlanEnvelope,
+}
+
+impl WriteChange {
+    pub fn add_record(record: Record) -> Self {
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Insert, record.table()).with_record_value(record),
+        }
+    }
+
+    pub fn set_record(record: Record) -> Self {
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Upsert, record.table()).with_record_value(record),
+        }
+    }
+
+    pub fn edit(
+        table: impl Into<String>,
+        lookup: impl Into<String>,
+        key: impl Into<Value>,
+        value: BTreeMap<String, Value>,
+    ) -> Self {
+        let lookup = lookup.into();
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Patch, table)
+                .with_lookup(lookup.clone())
+                .with_key(lookup, key)
+                .with_values(value),
+        }
+    }
+
+    pub fn remove(
+        table: impl Into<String>,
+        lookup: impl Into<String>,
+        key: impl Into<Value>,
+    ) -> Self {
+        let lookup = lookup.into();
+        Self {
+            plan: PlanEnvelope::new(PlanOp::Remove, table)
+                .with_lookup(lookup.clone())
+                .with_key(lookup, key),
+        }
+    }
+
+    pub fn into_plan(self) -> PlanEnvelope {
+        self.plan
+    }
+
+    pub fn from_outcome(outcome: PlanOutcome) -> Result<AppendResult, TensackError> {
+        match outcome {
+            PlanOutcome::Append(result) => Ok(result),
+            _ => Err(
+                PlanError::Invalid("write change returned non-append outcome".to_owned()).into(),
+            ),
+        }
+    }
+}
+
+impl WriteRequest for WriteChange {
+    type Output = AppendResult;
+
+    fn into_plan(self) -> Result<PlanEnvelope, TensackError> {
+        Ok(self.into_plan())
+    }
+
+    fn from_outcome(outcome: PlanOutcome) -> Result<Self::Output, TensackError> {
+        Self::from_outcome(outcome)
+    }
+}
+
+pub mod selector {
+    use super::{GetCount, GetMany, GetOne, GetPage, Value};
+
+    pub fn id(table: impl Into<String>, id: impl Into<String>) -> GetOne {
+        GetOne::new(table, "id", Value::Id(id.into()))
+    }
+
+    pub fn one(
+        table: impl Into<String>,
+        lookup: impl Into<String>,
+        key: impl Into<String>,
+    ) -> GetOne {
+        GetOne::new(table, lookup, Value::Text(key.into()))
+    }
+
+    pub fn many(
+        table: impl Into<String>,
+        lookup: impl Into<String>,
+        key: impl Into<String>,
+    ) -> GetMany {
+        GetMany::new(table, lookup, Value::Text(key.into()))
+    }
+
+    pub fn all(table: impl Into<String>) -> GetPage {
+        GetPage::new(table)
+    }
+
+    pub fn count(table: impl Into<String>) -> GetCount {
+        GetCount::table(table)
+    }
+}
+
+pub mod change {
+    use std::collections::BTreeMap;
+
+    use super::{Record, Value, WriteChange};
+
+    pub fn add(record: Record) -> WriteChange {
+        WriteChange::add_record(record)
+    }
+
+    pub fn set(record: Record) -> WriteChange {
+        WriteChange::set_record(record)
+    }
+
+    pub fn edit_id(
+        table: impl Into<String>,
+        id: impl Into<String>,
+        value: BTreeMap<String, Value>,
+    ) -> WriteChange {
+        WriteChange::edit(table, "id", Value::Id(id.into()), value)
+    }
+
+    pub fn remove_id(table: impl Into<String>, id: impl Into<String>) -> WriteChange {
+        WriteChange::remove(table, "id", Value::Id(id.into()))
+    }
 }
 
 /// Plan-level validation and execution errors.
@@ -367,14 +723,40 @@ impl TensackDatabase {
         self.store.init(&self.schema).map_err(TensackError::from)
     }
 
+    /// Gets the current state for one declarative selector.
+    pub fn get<R: GetRequest>(&self, request: R) -> Result<R::Output, TensackError> {
+        let outcome = self.execute_plan(request.into_plan()?)?;
+        R::from_outcome(outcome)
+    }
+
+    /// Applies one declarative state change.
+    pub fn write<W: WriteRequest>(&self, request: W) -> Result<W::Output, TensackError> {
+        let outcome = self.execute_plan(request.into_plan()?)?;
+        W::from_outcome(outcome)
+    }
+
     /// Inserts a new row. Fails if the id already exists.
     pub fn insert(&self, record: &Record) -> Result<AppendResult, TensackError> {
-        match self.execute_plan(
-            PlanEnvelope::new(PlanOp::Insert, record.table()).with_record_value(record.clone()),
-        )? {
-            PlanOutcome::Append(result) => Ok(result),
-            _ => unreachable!("insert plans return append results"),
+        self.write(WriteChange::add_record(record.clone()))
+    }
+
+    /// Inserts multiple new rows for one table in one storage batch.
+    pub fn insert_many(&self, records: &[Record]) -> Result<Vec<AppendResult>, TensackError> {
+        let Some(first) = records.first() else {
+            return Ok(Vec::new());
+        };
+        for record in records {
+            if record.table() != first.table() {
+                return Err(PlanError::Invalid(
+                    "insert_many records must all belong to the same table".to_owned(),
+                )
+                .into());
+            }
+            self.schema.validate_record(record)?;
         }
+        self.store
+            .append_insert_many(&self.schema, records)
+            .map_err(TensackError::from)
     }
 
     /// Writes a replacement row, or inserts it if it does not exist.
@@ -384,12 +766,7 @@ impl TensackDatabase {
 
     /// Writes a replacement row, or inserts it if it does not exist.
     pub fn upsert(&self, record: &Record) -> Result<AppendResult, TensackError> {
-        match self.execute_plan(
-            PlanEnvelope::new(PlanOp::Upsert, record.table()).with_record_value(record.clone()),
-        )? {
-            PlanOutcome::Append(result) => Ok(result),
-            _ => unreachable!("upsert plans return append results"),
-        }
+        self.write(WriteChange::set_record(record.clone()))
     }
 
     /// Writes a delete operation using the id from a row-like record.
@@ -417,16 +794,9 @@ impl TensackDatabase {
             .map_err(TensackError::from)
     }
 
-    /// Reads the current live row for a table id.
-    pub fn get(&self, table_name: &str, id: &str) -> Result<Option<Record>, TensackError> {
-        match self.execute_plan(
-            PlanEnvelope::new(PlanOp::Get, table_name)
-                .with_lookup("id")
-                .with_key("id", Value::Id(id.to_owned())),
-        )? {
-            PlanOutcome::Row(row) => Ok(row),
-            _ => unreachable!("get plans return row results"),
-        }
+    /// Compatibility path for reading the current live row by table id.
+    pub fn get_by_id(&self, table_name: &str, id: &str) -> Result<Option<Record>, TensackError> {
+        self.get(selector::id(table_name, id))
     }
 
     /// Reads the first current live row matching a lookup key.
@@ -856,7 +1226,7 @@ mod tests {
         assert!(first_chunk.contains("R\t1\tm1\thello\n"));
         assert!(second_chunk.contains("R\t2\tm2\tworld\n"));
         assert_eq!(
-            db.get("messages", "m1")
+            db.get(selector::id("messages", "m1"))
                 .unwrap()
                 .unwrap()
                 .fields()
@@ -887,6 +1257,133 @@ mod tests {
     }
 
     #[test]
+    fn get_and_write_accept_declarative_requests() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
+        let row = Record::new("messages")
+            .with_id("m1")
+            .unwrap()
+            .with_field("body", "hello")
+            .unwrap();
+
+        db.write(change::add(row)).unwrap();
+        let found = db.get(selector::id("messages", "m1")).unwrap().unwrap();
+        assert_eq!(
+            found.fields().get("body"),
+            Some(&Value::Text("hello".to_owned()))
+        );
+
+        db.write(change::edit_id(
+            "messages",
+            "m1",
+            BTreeMap::from([("body".to_owned(), Value::Text("updated".to_owned()))]),
+        ))
+        .unwrap();
+        let updated = db.get(selector::id("messages", "m1")).unwrap().unwrap();
+        assert_eq!(
+            updated.fields().get("body"),
+            Some(&Value::Text("updated".to_owned()))
+        );
+
+        db.write(change::remove_id("messages", "m1")).unwrap();
+        assert!(db.get(selector::id("messages", "m1")).unwrap().is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn insert_many_batches_rows_into_one_chunk() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
+        let rows = vec![
+            Record::new("messages")
+                .with_id("m1")
+                .unwrap()
+                .with_field("body", "hello")
+                .unwrap(),
+            Record::new("messages")
+                .with_id("m2")
+                .unwrap()
+                .with_field("body", "world")
+                .unwrap(),
+        ];
+
+        let results = db.insert_many(&rows).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].tx_id, 1);
+        assert_eq!(results[1].tx_id, 2);
+        assert!(root.join("chat/tables/messages/zz/zzz.ten").exists());
+        assert!(!root.join("chat/tables/messages/zz/zzy.ten").exists());
+        let chunk = fs::read_to_string(root.join("chat/tables/messages/zz/zzz.ten")).unwrap();
+        assert!(chunk.contains("R\t1\tm1\thello\n"));
+        assert!(chunk.contains("R\t2\tm2\tworld\n"));
+        assert_eq!(db.count("messages").unwrap(), 2);
+        assert_eq!(
+            db.get(selector::id("messages", "m2"))
+                .unwrap()
+                .unwrap()
+                .fields()
+                .get("body"),
+            Some(&Value::Text("world".to_owned()))
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn insert_many_rejects_duplicate_ids_before_append() {
+        let root = temp_root();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
+        let rows = vec![
+            Record::new("messages")
+                .with_id("m1")
+                .unwrap()
+                .with_field("body", "hello")
+                .unwrap(),
+            Record::new("messages")
+                .with_id("m1")
+                .unwrap()
+                .with_field("body", "world")
+                .unwrap(),
+        ];
+
+        assert!(db.insert_many(&rows).is_err());
+        assert!(!root.join("chat/tables/messages/zz/zzz.ten").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn insert_many_rejects_unique_lookup_duplicates_before_append() {
+        let root = temp_root();
+        let mut schema = DatabaseSchema::new();
+        let mut users = TableSchema::new("users");
+        users.add_field("id", PrimitiveType::Id).unwrap();
+        users.add_field("email", PrimitiveType::Text).unwrap();
+        users.add_field("name", PrimitiveType::Text).unwrap();
+        users.add_lookup("email", true).unwrap();
+        schema.add_table(users).unwrap();
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema);
+        let rows = vec![
+            Record::new("users")
+                .with_id("u1")
+                .unwrap()
+                .with_field("email", "same@test.com")
+                .unwrap()
+                .with_field("name", "Ada")
+                .unwrap(),
+            Record::new("users")
+                .with_id("u2")
+                .unwrap()
+                .with_field("email", "same@test.com")
+                .unwrap()
+                .with_field("name", "Ben")
+                .unwrap(),
+        ];
+
+        assert!(db.insert_many(&rows).is_err());
+        assert!(!root.join("chat/tables/users/zz/zzz.ten").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn put_replaces_existing_row() {
         let root = temp_root();
         let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema());
@@ -904,7 +1401,7 @@ mod tests {
         db.insert(&first).unwrap();
         db.put(&second).unwrap();
         assert_eq!(
-            db.get("messages", "m1")
+            db.get(selector::id("messages", "m1"))
                 .unwrap()
                 .unwrap()
                 .fields()
@@ -957,13 +1454,54 @@ mod tests {
 
         fs::remove_file(root.join("chat/engine/messages.tenb")).unwrap();
         assert_eq!(
-            db.get("messages", "m2")
+            db.get(selector::id("messages", "m2"))
                 .unwrap()
                 .unwrap()
                 .fields()
                 .get("body"),
             second.fields().get("body")
         );
+        assert!(root.join("chat/engine/messages.tenb").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn fresh_handle_uses_and_rebuilds_generated_cache() {
+        let root = temp_root();
+        let mut schema = DatabaseSchema::new();
+        let mut messages = TableSchema::new("messages");
+        messages.add_field("id", PrimitiveType::Id).unwrap();
+        messages
+            .add_field("conversation_id", PrimitiveType::Id)
+            .unwrap();
+        messages.add_field("body", PrimitiveType::Text).unwrap();
+        messages.add_lookup("conversation_id", false).unwrap();
+        schema.add_table(messages).unwrap();
+
+        let db = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema.clone());
+        let row = Record::new("messages")
+            .with_id("m1")
+            .unwrap()
+            .with_field("conversation_id", Value::Id("cv1".to_owned()))
+            .unwrap()
+            .with_field("body", "hello")
+            .unwrap();
+        db.insert(&row).unwrap();
+
+        let reopened =
+            TensackDatabase::open_local_with_schema(root.clone(), "chat", schema.clone());
+        let rows = reopened
+            .get_many_by("messages", "conversation_id", "cv1")
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].fields().get("body"),
+            Some(&Value::Text("hello".to_owned()))
+        );
+
+        fs::remove_file(root.join("chat/engine/messages.tenb")).unwrap();
+        let cold = TensackDatabase::open_local_with_schema(root.clone(), "chat", schema);
+        assert_eq!(cold.count("messages").unwrap(), 1);
         assert!(root.join("chat/engine/messages.tenb").exists());
         let _ = fs::remove_dir_all(root);
     }
@@ -979,9 +1517,9 @@ mod tests {
             .unwrap();
 
         db.put(&row).unwrap();
-        assert!(db.get("messages", "m1").unwrap().is_some());
+        assert!(db.get(selector::id("messages", "m1")).unwrap().is_some());
         db.delete_by_id("messages", "m1").unwrap();
-        assert!(db.get("messages", "m1").unwrap().is_none());
+        assert!(db.get(selector::id("messages", "m1")).unwrap().is_none());
 
         let delete_chunk =
             fs::read_to_string(root.join("chat/tables/messages/zz/zzy.ten")).unwrap();
@@ -1043,7 +1581,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.tx_id, 2);
-        let updated = db.get("messages", "m1").unwrap().unwrap();
+        let updated = db.get(selector::id("messages", "m1")).unwrap().unwrap();
         assert_eq!(
             updated.fields().get("body"),
             Some(&Value::Text("updated".to_owned()))
@@ -1080,7 +1618,7 @@ mod tests {
             .with_key("email", Value::Text("a@test.com".to_owned()));
         db.execute_plan(plan).unwrap();
 
-        assert!(db.get("users", "u1").unwrap().is_none());
+        assert!(db.get(selector::id("users", "u1")).unwrap().is_none());
         let _ = fs::remove_dir_all(root);
     }
 

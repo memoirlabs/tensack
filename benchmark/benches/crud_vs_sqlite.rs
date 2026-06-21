@@ -5,7 +5,9 @@ use criterion::{
 };
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
-use tensack::{DatabaseSchema, PrimitiveType, Record, TableSchema, TensackDatabase, Value};
+use tensack::{
+    DatabaseSchema, PrimitiveType, Record, TableSchema, TensackDatabase, Value, change, selector,
+};
 
 const ROW_COUNTS: &[usize] = &[25, 100];
 const TABLE: &str = "users";
@@ -44,14 +46,16 @@ fn open_tensack() -> (TempDir, TensackDatabase) {
 fn populated_tensack(rows: usize) -> (TempDir, TensackDatabase) {
     let (dir, db) = open_tensack();
     for index in 0..rows {
-        db.insert(&user_record(index)).unwrap();
+        db.write(change::add(user_record(index))).unwrap();
     }
     (dir, db)
 }
 
 fn open_sqlite() -> (TempDir, Connection) {
     let dir = tempfile::tempdir().unwrap();
-    let conn = Connection::open(dir.path().join("bench.sqlite3")).unwrap();
+    let db_path = dir.path().join("bench.sqlite3");
+    std::fs::File::create(&db_path).unwrap();
+    let conn = Connection::open(db_path).unwrap();
     conn.execute_batch(
         "
         CREATE TABLE users (
@@ -66,6 +70,22 @@ fn open_sqlite() -> (TempDir, Connection) {
     (dir, conn)
 }
 
+fn open_sqlite_memory() -> Connection {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "
+        CREATE TABLE users (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            age INTEGER NOT NULL
+        );
+        ",
+    )
+    .unwrap();
+    conn
+}
+
 fn insert_sqlite_user(conn: &Connection, index: usize) {
     conn.execute(
         "INSERT INTO users (id, email, name, age) VALUES (?1, ?2, ?3, ?4)",
@@ -77,6 +97,25 @@ fn insert_sqlite_user(conn: &Connection, index: usize) {
         ],
     )
     .unwrap();
+}
+
+fn insert_sqlite_users_in_transaction(conn: &mut Connection, rows: usize) {
+    let tx = conn.transaction().unwrap();
+    {
+        let mut stmt = tx
+            .prepare("INSERT INTO users (id, email, name, age) VALUES (?1, ?2, ?3, ?4)")
+            .unwrap();
+        for index in 0..rows {
+            stmt.execute(params![
+                format!("u{index}"),
+                format!("user{index}@example.test"),
+                format!("User {index}"),
+                index as i64
+            ])
+            .unwrap();
+        }
+    }
+    tx.commit().unwrap();
 }
 
 fn populated_sqlite(rows: usize) -> (TempDir, Connection) {
@@ -94,14 +133,14 @@ fn bench_create(c: &mut Criterion) {
         group.throughput(Throughput::Elements(rows as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_insert", rows),
+            BenchmarkId::new("tensack_write_add", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
                     open_tensack,
                     |(_dir, db)| {
                         for index in 0..rows {
-                            db.insert(&user_record(index)).unwrap();
+                            db.write(change::add(user_record(index))).unwrap();
                         }
                     },
                     BatchSize::SmallInput,
@@ -124,6 +163,35 @@ fn bench_create(c: &mut Criterion) {
                 );
             },
         );
+
+        group.bench_with_input(
+            BenchmarkId::new("tensack_insert_many", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    open_tensack,
+                    |(_dir, db)| {
+                        let records: Vec<_> = (0..rows).map(user_record).collect();
+                        db.insert_many(&records).unwrap();
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("sqlite_insert_transaction_memory", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    open_sqlite_memory,
+                    |mut conn| {
+                        insert_sqlite_users_in_transaction(&mut conn, rows);
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
     }
 
     group.finish();
@@ -140,7 +208,7 @@ fn bench_read(c: &mut Criterion) {
                 || populated_tensack(rows),
                 |(_dir, db)| {
                     for index in 0..rows {
-                        let row = db.get(TABLE, &format!("u{index}")).unwrap();
+                        let row = db.get(selector::id(TABLE, format!("u{index}"))).unwrap();
                         black_box(row);
                     }
                 },
@@ -188,21 +256,21 @@ fn bench_update(c: &mut Criterion) {
         group.throughput(Throughput::Elements(rows as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_patch_by_id", rows),
+            BenchmarkId::new("tensack_write_edit", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
                     || populated_tensack(rows),
                     |(_dir, db)| {
                         for index in 0..rows {
-                            db.patch_by_id(
+                            db.write(change::edit_id(
                                 TABLE,
-                                &format!("u{index}"),
+                                format!("u{index}"),
                                 BTreeMap::from([
                                     ("name".to_owned(), Value::Text(format!("Updated {index}"))),
                                     ("age".to_owned(), Value::Int((index + 1) as i64)),
                                 ]),
-                            )
+                            ))
                             .unwrap();
                         }
                     },
@@ -246,14 +314,15 @@ fn bench_delete(c: &mut Criterion) {
         group.throughput(Throughput::Elements(rows as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_delete_by_id", rows),
+            BenchmarkId::new("tensack_write_remove", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
                     || populated_tensack(rows),
                     |(_dir, db)| {
                         for index in 0..rows {
-                            db.delete_by_id(TABLE, &format!("u{index}")).unwrap();
+                            db.write(change::remove_id(TABLE, format!("u{index}")))
+                                .unwrap();
                         }
                     },
                     BatchSize::SmallInput,

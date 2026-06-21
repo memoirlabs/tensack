@@ -28,7 +28,7 @@ This chapter is the honesty check.
 
 - local database directory layout
 - reverse-sorted chunk naming
-- append insert
+- append create
 - append full replacement
 - delete tombstones
 - `.tenb` rebuilds
@@ -41,16 +41,8 @@ This chapter is the honesty check.
 ### Runtime
 
 - `TensackDatabase`
-- `insert`
-- `upsert`
-- `put` compatibility alias
-- `patch_by_id`
-- `delete_by_id`
-- `get`
-- `get_by`
-- `get_many_by`
-- `scan`
-- `count`
+- `db.get(selector)` for current state once
+- `db.write(change)` for declared state changes
 - `execute_plan`
 
 ### Schema Compiler
@@ -58,9 +50,11 @@ This chapter is the honesty check.
 - parses `schema!`
 - validates schema
 - emits table handles
+- emits generated `by` selectors
+- emits generated `add`/`set`/`edit`/`remove` changes
 - emits patch builders
 - emits unique lookup keys
-- emits get/find/scan/count helpers
+- emits page/count selectors
 
 ### CLI
 
@@ -72,29 +66,9 @@ This chapter is the honesty check.
 - stable generated API snapshots
 - CLI commands beyond help/version
 - admin UI
+- `db.watch(selector)` live subscriptions
 - plan JSON serde
 - repair/inspect CLI
 - compaction
 - `.tenx`
 - durable cursor format
-
-## Current Compatibility Names
-
-The runtime still has:
-
-```txt
-put
-delete_by_id
-get_by
-get_many_by
-```
-
-The target generated API should prefer:
-
-```txt
-upsert
-remove
-get.<lookup>
-find.<lookup>
-```
-

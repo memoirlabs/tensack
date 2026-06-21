@@ -11,6 +11,8 @@ Names should make the system easier to understand.
 - `Lookup`
 - `Record`
 - `Value`
+- `Selector`
+- `Change`
 - `Plan`
 - `Store`
 - `Format`
@@ -34,39 +36,40 @@ Use:
 Value
 ```
 
-### `upsert`
+### `get`
 
-Generated public API uses:
+Use for current state once:
 
 ```txt
-upsert
+db.get(selector)
 ```
 
-Runtime compatibility can keep:
+### `watch`
+
+Reserve for live subscriptions:
 
 ```txt
-put
+db.watch(selector)
 ```
 
-### `remove`
+Do not claim this is implemented until subscriptions actually update after
+writes.
 
-Generated public API uses:
+### `write`
+
+Use for applying declared changes:
 
 ```txt
+db.write(change)
+```
+
+### Change Words
+
+Generated changes may use obvious words under `db.write(...)`:
+
+```txt
+add
+set
+edit
 remove
 ```
-
-The store can still write delete tombstones.
-
-### `get` and `find`
-
-Use:
-
-```txt
-get.<unique_lookup>
-find.<lookup>
-```
-
-`get` returns one or none.
-
-`find` returns many.
