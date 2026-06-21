@@ -1,9 +1,8 @@
 # Tensack Internal Book
 
-This book is for us, not end users.
-
-Its job is to keep the product shape, backend boundaries, naming decisions, and
-implementation rules clear enough that future work does not drift.
+This book records Tensack's product shape, backend boundaries, naming decisions,
+and implementation rules. It is more detailed than the public README and is
+intended for maintainers, contributors, and coding agents.
 
 Start here:
 

@@ -28,9 +28,13 @@ This chapter is the honesty check.
 
 - local database directory layout
 - reverse-sorted chunk naming
-- append create
+- append into reusable `.ten` segments
 - append full replacement
+- same-table write batches
 - delete tombstones
+- compact recoverable metadata counters
+- lazy disk `.tenb` persistence with source-hash rebuild checks
+- `next_tx` recovery from canonical `.ten` operation rows
 - `.tenb` rebuilds
 - id lookup
 - declared lookup reads
@@ -43,6 +47,7 @@ This chapter is the honesty check.
 - `TensackDatabase`
 - `db.get(selector)` for current state once
 - `db.write(change)` for declared state changes
+- `db.write_many(changes)` for same-table batched changes
 - `execute_plan`
 
 ### Schema Compiler

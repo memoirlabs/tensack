@@ -61,14 +61,11 @@ notes-db/
     tags.tenb
   tables/
     notebooks/
-      zz/
-        zzz.ten
+      zzz.ten
     notes/
-      zz/
-        zzz.ten
+      zzz.ten
     tags/
-      zz/
-        zzz.ten
+      zzz.ten
 ```
 
 The latest schema has three tables:

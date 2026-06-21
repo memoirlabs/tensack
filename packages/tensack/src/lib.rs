@@ -11,7 +11,7 @@ pub use tensack_core::{
     DatabaseSchema, FieldSpec, PrimitiveType, Record, SchemaError, TableSchema, Value, Workspace,
 };
 pub use tensack_format::Operation;
-pub use tensack_store::{AppendOperation, AppendResult, LocalStore};
+pub use tensack_store::{AppendOperation, AppendResult, LocalStore, WriteBatch, WriteBatchMode};
 
 const DEFAULT_PLAN_LIMIT: usize = 100;
 const MAX_PLAN_LIMIT: usize = 1_000;
@@ -773,7 +773,7 @@ impl TensackDatabase {
             .into());
         }
 
-        let mut operations = Vec::with_capacity(plans.len());
+        let mut batch = WriteBatch::new(first.table.clone(), WriteBatchMode::Upsert);
         let mut touched_ids = BTreeSet::new();
         for plan in plans {
             let table = self
@@ -791,7 +791,7 @@ impl TensackDatabase {
                         ))
                         .into());
                     }
-                    operations.push(AppendOperation::put(record));
+                    batch.push(AppendOperation::put(record))?;
                 }
                 PlanOp::Patch => {
                     validate_patch_plan(table, &plan)?;
@@ -807,7 +807,7 @@ impl TensackDatabase {
                         row.insert_field(name, value)?;
                     }
                     self.schema.validate_record(&row)?;
-                    operations.push(AppendOperation::put(row));
+                    batch.push(AppendOperation::put(row))?;
                 }
                 PlanOp::Remove => {
                     let row = self.require_unique_row(&plan)?;
@@ -820,7 +820,7 @@ impl TensackDatabase {
                     }
                     let mut record = Record::new(table.name());
                     record.insert_id(id);
-                    operations.push(AppendOperation::delete(record));
+                    batch.push(AppendOperation::delete(record))?;
                 }
                 PlanOp::Get | PlanOp::Find | PlanOp::Scan | PlanOp::Count | PlanOp::Insert => {
                     return Err(PlanError::Invalid(
@@ -832,7 +832,7 @@ impl TensackDatabase {
         }
 
         self.store
-            .append_many(&self.schema, &operations)
+            .append_batch(&self.schema, &batch)
             .map_err(TensackError::from)
     }
 
@@ -1321,15 +1321,14 @@ mod tests {
         assert_eq!(one.tx_id, 1);
         assert_eq!(two.tx_id, 2);
         let db_dir = root.join("chat");
-        assert!(db_dir.join("tables/messages/zz/zzz.ten").exists());
-        assert!(db_dir.join("tables/messages/zz/zzy.ten").exists());
+        assert!(db_dir.join("tables/messages/zzz.ten").exists());
+        assert!(!db_dir.join("tables/messages/zzy.ten").exists());
         assert!(db_dir.join("tensack.toml").exists());
         assert!(db_dir.join("engine/messages.tenb").exists());
-        let first_chunk = fs::read_to_string(db_dir.join("tables/messages/zz/zzz.ten")).unwrap();
-        let second_chunk = fs::read_to_string(db_dir.join("tables/messages/zz/zzy.ten")).unwrap();
-        assert!(first_chunk.starts_with("TEN\t1\ttable\tmessages\t"));
-        assert!(first_chunk.contains("R\t1\tm1\thello\n"));
-        assert!(second_chunk.contains("R\t2\tm2\tworld\n"));
+        let chunk = fs::read_to_string(db_dir.join("tables/messages/zzz.ten")).unwrap();
+        assert!(chunk.starts_with("TEN\t1\ttable\tmessages\t"));
+        assert!(chunk.contains("R\t1\tm1\thello\n"));
+        assert!(chunk.contains("R\t2\tm2\tworld\n"));
         assert_eq!(
             db.get(selector::id("messages", "m1"))
                 .unwrap()
@@ -1416,9 +1415,9 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].tx_id, 1);
         assert_eq!(results[1].tx_id, 2);
-        assert!(root.join("chat/tables/messages/zz/zzz.ten").exists());
-        assert!(!root.join("chat/tables/messages/zz/zzy.ten").exists());
-        let chunk = fs::read_to_string(root.join("chat/tables/messages/zz/zzz.ten")).unwrap();
+        assert!(root.join("chat/tables/messages/zzz.ten").exists());
+        assert!(!root.join("chat/tables/messages/zzy.ten").exists());
+        let chunk = fs::read_to_string(root.join("chat/tables/messages/zzz.ten")).unwrap();
         assert!(chunk.contains("R\t1\tm1\thello\n"));
         assert!(chunk.contains("R\t2\tm2\tworld\n"));
         assert_eq!(db.count("messages").unwrap(), 2);
@@ -1451,7 +1450,7 @@ mod tests {
         ];
 
         assert!(db.insert_many(&rows).is_err());
-        assert!(!root.join("chat/tables/messages/zz/zzz.ten").exists());
+        assert!(!root.join("chat/tables/messages/zzz.ten").exists());
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1484,7 +1483,7 @@ mod tests {
         ];
 
         assert!(db.insert_many(&rows).is_err());
-        assert!(!root.join("chat/tables/users/zz/zzz.ten").exists());
+        assert!(!root.join("chat/tables/users/zzz.ten").exists());
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1524,9 +1523,9 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].tx_id, 3);
         assert_eq!(results[1].tx_id, 4);
-        assert!(root.join("chat/tables/messages/zz/zzy.ten").exists());
-        assert!(!root.join("chat/tables/messages/zz/zzx.ten").exists());
-        let chunk = fs::read_to_string(root.join("chat/tables/messages/zz/zzy.ten")).unwrap();
+        assert!(root.join("chat/tables/messages/zzz.ten").exists());
+        assert!(!root.join("chat/tables/messages/zzy.ten").exists());
+        let chunk = fs::read_to_string(root.join("chat/tables/messages/zzz.ten")).unwrap();
         assert!(chunk.contains("R\t3\tm1\tfirst\n"));
         assert!(chunk.contains("R\t4\tm2\tsecond\n"));
         assert_eq!(
@@ -1569,9 +1568,9 @@ mod tests {
         assert_eq!(results[0].tx_id, 3);
         assert_eq!(results[1].tx_id, 4);
         assert_eq!(db.count("messages").unwrap(), 0);
-        assert!(root.join("chat/tables/messages/zz/zzy.ten").exists());
-        assert!(!root.join("chat/tables/messages/zz/zzx.ten").exists());
-        let chunk = fs::read_to_string(root.join("chat/tables/messages/zz/zzy.ten")).unwrap();
+        assert!(root.join("chat/tables/messages/zzz.ten").exists());
+        assert!(!root.join("chat/tables/messages/zzy.ten").exists());
+        let chunk = fs::read_to_string(root.join("chat/tables/messages/zzz.ten")).unwrap();
         assert!(chunk.contains("D\t3\tm1\n"));
         assert!(chunk.contains("D\t4\tm2\n"));
         let _ = fs::remove_dir_all(root);
@@ -1655,7 +1654,7 @@ mod tests {
                 .get("body"),
             second.fields().get("body")
         );
-        assert!(root.join("chat/engine/messages.tenb").exists());
+        assert!(!root.join("chat/engine/messages.tenb").exists());
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1715,8 +1714,7 @@ mod tests {
         db.delete_by_id("messages", "m1").unwrap();
         assert!(db.get(selector::id("messages", "m1")).unwrap().is_none());
 
-        let delete_chunk =
-            fs::read_to_string(root.join("chat/tables/messages/zz/zzy.ten")).unwrap();
+        let delete_chunk = fs::read_to_string(root.join("chat/tables/messages/zzz.ten")).unwrap();
         assert!(delete_chunk.contains("D\t2\tm1\n"));
         let _ = fs::remove_dir_all(root);
     }
@@ -1750,7 +1748,7 @@ mod tests {
 
         db.insert(&first).unwrap();
         assert!(db.insert(&second).is_err());
-        let first_chunk = fs::read_to_string(root.join("chat/tables/users/zz/zzz.ten")).unwrap();
+        let first_chunk = fs::read_to_string(root.join("chat/tables/users/zzz.ten")).unwrap();
         assert!(!first_chunk.contains("u2\tsame@test.com"));
         let _ = fs::remove_dir_all(root);
     }

@@ -725,7 +725,7 @@ mod tests {
             rows: vec![TenbRowEntry {
                 id: "m1".to_owned(),
                 ptr: RowPointer {
-                    chunk_name: "zz/zzz.ten".to_owned(),
+                    chunk_name: "zzz.ten".to_owned(),
                     offset: 42,
                     len: 18,
                     tx_id: 7,
@@ -750,7 +750,7 @@ mod tests {
 
     #[test]
     fn legacy_text_tenb_still_decodes() {
-        let legacy = b"TENB\t1\tmessages\tschema\tsource\nrow\tm1\tzz/zzz.ten\t42\t18\t7\nlookup\tconversation_id\tcv1\tm1\n";
+        let legacy = b"TENB\t1\tmessages\tschema\tsource\nrow\tm1\tzzz.ten\t42\t18\t7\nlookup\tconversation_id\tcv1\tm1\n";
         let decoded = decode_tenb_cache(legacy).unwrap();
         assert_eq!(decoded.version, 1);
         assert_eq!(decoded.table, "messages");

@@ -249,6 +249,44 @@ fn bench_read(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_count(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crud_count_binary_projection");
+
+    for &rows in ROW_COUNTS {
+        group.throughput(Throughput::Elements(rows as u64));
+
+        group.bench_with_input(
+            BenchmarkId::new("tensack_count", rows),
+            &rows,
+            |b, &rows| {
+                b.iter_batched(
+                    || populated_tensack(rows),
+                    |(_dir, db)| {
+                        let count = db.count(TABLE).unwrap();
+                        black_box(count);
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+
+        group.bench_with_input(BenchmarkId::new("sqlite_count", rows), &rows, |b, &rows| {
+            b.iter_batched(
+                || populated_sqlite(rows),
+                |(_dir, conn)| {
+                    let count: i64 = conn
+                        .query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
+                        .unwrap();
+                    black_box(count);
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+
+    group.finish();
+}
+
 fn bench_update(c: &mut Criterion) {
     let mut group = c.benchmark_group("crud_update");
 
@@ -400,6 +438,6 @@ fn bench_delete(c: &mut Criterion) {
 criterion_group!(
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = bench_create, bench_read, bench_update, bench_delete
+    targets = bench_create, bench_read, bench_count, bench_update, bench_delete
 );
 criterion_main!(benches);

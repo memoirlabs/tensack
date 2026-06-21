@@ -99,8 +99,13 @@ PlanEnvelope
 PlanOutcome
 TensackDatabase::get
 TensackDatabase::write
+TensackDatabase::write_many
 TensackDatabase::execute_plan
 ```
+
+`write_many` is not a different operation model. It resolves several
+same-table write plans into one storage batch so the store can append one `.ten`
+chunk and publish one generated index snapshot.
 
 Still needed:
 

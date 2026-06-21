@@ -563,7 +563,7 @@
                   <span class="number">3</span>
                   <div>
                     <h3>Write the chunk</h3>
-                    <p>The store creates paths like `tables/messages/zz/zzz.ten` using reverse lowercase base-36.</p>
+                    <p>The store creates paths like `tables/messages/zzz.ten` using reverse lowercase base-36.</p>
                   </div>
                 </div>
                 <div class="flow-step">
@@ -575,15 +575,12 @@
                 </div>
               </div>
             </div>
-            <pre><code>counter 0 -> zz/zzz.ten
-counter 1 -> zz/zzy.ten
-counter 2 -> zz/zzx.ten
+            <pre><code>counter 0 -> zzz.ten
+counter 1 -> zzy.ten
+counter 2 -> zzx.ten
+counter 46655 -> 000.ten
 
-generation = counter / 46656
-local      = counter % 46656
-
-folder = reverse_base36(generation, 2)
-file   = reverse_base36(local, 3)</code></pre>
+file = reverse_base36(counter, 3)</code></pre>
           </div>
         </section>
 
@@ -609,12 +606,10 @@ file   = reverse_base36(local, 3)</code></pre>
   tensack.toml
   tables/
     messages/
-      zz/
-        zzz.ten
-        zzy.ten
+      zzz.ten
+      zzy.ten
     users/
-      zz/
-        zzz.ten
+      zzz.ten
   engine/
     messages.tenb
     users.tenb</code></pre>

@@ -43,6 +43,7 @@ db.write(change::add(record))?;
 db.write(change::set(record))?;
 db.write(change::edit_id("messages", "m1", patch))?;
 db.write(change::remove_id("messages", "m1"))?;
+db.write_many(&[change::edit_id("messages", "m1", patch)])?;
 db.execute_plan(plan)?;
 ```
 
@@ -63,6 +64,9 @@ db.write(messages::add(row))?;
 db.write(messages::set(row))?;
 db.write(messages::edit(messages::key::id("m1"), patch))?;
 db.write(messages::remove(messages::key::id("m1")))?;
+db.write_many(&[
+    messages::edit(messages::key::id("m1"), patch),
+])?;
 ```
 
 The product decision is not table-handle command soup as the user-facing shape.

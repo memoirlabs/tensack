@@ -1,6 +1,6 @@
 # Tensack Admin UI
 
-Status: placeholder.
+Status: planned.
 
 This app will provide a local interface for viewing and inspecting a Tensack database.
 

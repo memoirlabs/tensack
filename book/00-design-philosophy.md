@@ -36,6 +36,7 @@ Users should call:
 db.get(selector)
 db.watch(selector)
 db.write(change)
+db.write_many(changes)
 ```
 
 Generated schema code should provide selectors such as
@@ -45,7 +46,7 @@ execute plans, not expose storage internals.
 
 ### Storage is not the API
 
-Paths like `tables/messages/zz/zzz.ten` are important, but users should not have
+Paths like `tables/messages/zzz.ten` are important, but users should not have
 to know them during normal application work.
 
 Storage details belong to `tensack-store` and file-format docs.

@@ -22,6 +22,7 @@ The product rule is:
 - normal current-state access goes through `db.get(selector)`
 - future live state goes through `db.watch(selector)`
 - changes go through `db.write(change)`
+- same-table change batches go through `db.write_many(changes)`
 - generated selectors and changes build internal plans
 
 ## Mental Model
@@ -38,7 +39,7 @@ Tensack:
 schema.tensack
   -> schema compiler
   -> generated selectors and changes
-  -> db.get(...) / db.write(...)
+  -> db.get(...) / db.write(...) / db.write_many(...)
   -> internal plan envelope
   -> local store
 ```
@@ -189,6 +190,30 @@ db.write(messages::remove(messages::key::id(message_id)))?;
 ```
 
 Removes resolve a unique target and write a tombstone internally.
+
+### Apply Several Same-Table Changes
+
+SQLite:
+
+```sql
+BEGIN;
+UPDATE messages SET body = ? WHERE id = ?;
+UPDATE messages SET body = ? WHERE id = ?;
+COMMIT;
+```
+
+Tensack:
+
+```rust
+db.write_many([
+    messages::edit(messages::key::id(first_id), first_patch),
+    messages::edit(messages::key::id(second_id), second_patch),
+])?;
+```
+
+`write_many` is not a general transaction language. It is the simple public
+batch shape for one-table changes that can be validated before appending to the
+current `.ten` segment.
 
 ### Get A Page
 

@@ -208,14 +208,14 @@ mod tests {
         assert!(root.join("generated/artifacts/schema-v2.rs").exists());
         assert!(db.join("engine/notebooks.tenb").exists());
         assert!(db.join("engine/notes.tenb").exists());
-        assert!(db.join("tables/notebooks/zz/zzz.ten").exists());
-        assert!(db.join("tables/notes/zz/zzz.ten").exists());
+        assert!(db.join("tables/notebooks/zzz.ten").exists());
+        assert!(db.join("tables/notes/zzz.ten").exists());
 
         let generated = fs::read_to_string(root.join("generated/schema.rs")).unwrap();
         assert!(generated.contains("pub mod notebooks"));
         assert!(generated.contains("pub mod notes"));
 
-        let notes = fs::read_to_string(db.join("tables/notes/zz/zzz.ten")).unwrap();
+        let notes = fs::read_to_string(db.join("tables/notes/zzz.ten")).unwrap();
         assert!(notes.contains("TEN\t1\ttable\tnotes\t"));
         assert!(notes.contains("@field\tnotebook_id\tid\n"));
         assert!(notes.contains("@lookup\tnotebook_id\tmany\n"));
@@ -242,7 +242,7 @@ mod tests {
 
         assert!(root.join("generated/artifacts/schema-v3.rs").exists());
         assert!(db.join("engine/tags.tenb").exists());
-        assert!(db.join("tables/tags/zz/zzz.ten").exists());
+        assert!(db.join("tables/tags/zzz.ten").exists());
 
         let generated = fs::read_to_string(root.join("generated/schema.rs")).unwrap();
         assert!(generated.contains("pub mod tags"));

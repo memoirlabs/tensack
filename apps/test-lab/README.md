@@ -16,7 +16,7 @@ Scope and constraints:
 - Not part of the runtime binary.
 - Broadly scoped experiment surface: static files, fixtures, notes, and compacted
   experiment records.
-- Can be replaced/removed whenever we decide the real UI is ready.
+- Can be replaced or removed once the real UI is ready.
 
 Run:
 

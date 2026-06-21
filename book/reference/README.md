@@ -10,3 +10,6 @@ They are background material. The current master book is the source of truth:
 
 If an archived file conflicts with the book chapters, the book wins.
 
+Important current divergence: older chunk-naming notes in this archive may
+describe generation folders such as `zz/zzz.ten`. The current runtime and active
+storage chapter use flat table-local chunk files such as `zzz.ten`.

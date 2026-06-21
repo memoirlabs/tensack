@@ -1,16 +1,20 @@
 # AGENTS.md
 
-This file is the behavior contract for future coding agents.
+This file is the implementation contract for automated coding agents working in
+this repository. It defines the authoritative project boundaries, current
+runtime status, and verification rules agents must follow.
 
-## What this repository is for
+## Project Purpose
 
-`tensack` is building a local-first data layer for a small database shell.
-The root workspace is a **v0 scaffold**: crate boundaries exist, and a minimal
-runtime path is implemented for typed schema validation + `.ten` append writes.
+`tensack` is a local-first database layer for small tools, agent runtimes,
+desktop apps, research projects, and quantitative workflows. The root workspace
+is a **v0 scaffold**: crate boundaries exist, and a minimal runtime path is
+implemented for typed schema validation, `.ten` append writes, generated `.tenb`
+indexes, and simple `get` / `write` APIs.
 
-## Final target (authoritative)
+## Target Package Boundaries
 
-The direction is to end up with:
+The repository should continue toward these stable boundaries:
 
 - `packages/tensack-core`: shared domain types (workspace identity, model boundaries).
 - `packages/tensack-format`: durable file format boundary (header/validation/parsing paths).
@@ -26,11 +30,13 @@ The direction is to end up with:
 - `packages/docs/file-format.md` and `packages/docs/commands.md`: public-facing user docs.
 - `book/13-sqlite-mapping.md`: canonical mapping from simple SQLite operations
   to generated Tensack `get` / `watch` / `write` syntax.
+- `book/14-write-engine.md`: canonical outline for the batch-first `.ten` write
+  engine and recoverable metadata rules.
 - `user-scripts/install.sh`: local install script once the shell is feature-complete.
 
-## Current implementation status (important)
+## Current Implementation Status
 
-Current code now includes:
+Current code includes:
 
 - App entrypoint is `apps/tensack`.
 - CLI surface currently documents only:
@@ -39,14 +45,14 @@ Current code now includes:
 - Core behavior includes:
   - minimal schema primitives in `packages/tensack-core`,
   - legacy JSONL event encoding/decoding helpers in `packages/tensack-format`,
-  - append-only `.ten` writes, `tensack.toml`, and generated `.tenb` lookup caches in `packages/tensack-store`,
-  - a composed `get` / `write` API in `packages/tensack`.
+  - append-only `.ten` write batches, recoverable `tensack.toml` counters, and generated `.tenb` lookup caches in `packages/tensack-store`,
+  - a composed `get` / `write` / `write_many` API in `packages/tensack`.
 - Schema compiler in `packages/tensack-schema-compiler` with:
   - `schema!` parser for importable schema snippets,
   - compile-time validation for naming/lookups/duplicates,
   - optional raw Rust row/table emission for generated APIs.
 
-## Temporary / non-authoritative material
+## Temporary / Non-Authoritative Material
 
 - Any file that says “prototype,” “draft,” “placeholder,” “plan,” or “temporary”
   must be treated as not shipped logic.
@@ -54,15 +60,17 @@ Current code now includes:
 Use these as references only; do not use them as the source of truth for what is
 currently implemented.
 
-## Canonical references for present scope
+## Canonical References
 
 - `book/README.md` and `book/SUMMARY.md` for internal design philosophy and the
   current build direction.
 - focused chapters in `book/` for schema, API, plan envelope, storage, file
   format, status, package boundaries, naming, testing, and schema compiler work.
-- `README.md` and `packages/docs/project-specs.md` for current structure and doc map.
+- `README.md` and `packages/docs/project-specs.md` for public structure and doc map.
 - `book/13-sqlite-mapping.md` for the authoritative explanation of how simple
   SQLite-shaped operations map to Tensack's schema-declared selectors and changes.
+- `book/14-write-engine.md` for the authoritative write-path outline. If code
+  and docs drift, restore the batch-first invariant described there.
 - `packages/docs/commands.md`, `packages/docs/file-format.md`,
   and `book/11-testing.md` for supporting contract language and test strategy.
 
@@ -70,7 +78,7 @@ Older long-form docs such as `tensack_rust_backend_architecture.md` and
 `tensack_functional_addendum.md` are archived under `book/reference/`. If they
 conflict with the book chapters, the book wins.
 
-## Core constraints (do not violate without instruction)
+## Core Constraints
 
 - Keep storage local to process directory-backed data; do not introduce hosted DB
   dependencies as the primary engine (SQL databases included).
@@ -79,16 +87,19 @@ conflict with the book chapters, the book wins.
   `db.get(...)`, generated changes consumed by `db.write(...)`, and future
   subscriptions through `db.watch(...)`.
 - Do not expose storage internals as part of normal user APIs.
+- Keep `.ten` chunk files flat under each table directory
+  (`tables/<table>/<chunk>.ten`). Do not reintroduce generation folders unless
+  explicitly requested.
 - Do not claim “implemented” when a feature is only planned or stubbed.
 - Avoid speculative abstractions outside the existing boundary model.
 - Keep crate responsibilities aligned with the boundary list above.
-- CLI is primarily a simple command surface and the controlling interface for the
-  repo right now.
+- CLI is currently a small command surface. Do not imply richer CLI behavior
+  until code and tests exist.
 - Keep one interactive behavior path out of scope until it is explicitly needed.
 - If a richer interactive command mode is added later, use terminal primitives via
   a maintained library like Ratatui for that narrow scope.
 
-## Workspace map for edits
+## Edit Map
 
 - `apps/tensack` — runnable CLI app.
 - `packages/tensack-core` — domain types.
@@ -105,7 +116,7 @@ conflict with the book chapters, the book wins.
 - `packages/docs` — current and archive documentation.
 - `user-scripts` — install script location.
 
-## Experiment workflow (non-hot-path)
+## Experiment Workflow
 
 - Keep `apps/test-lab` for temporary experiments and ad-hoc checks.
 - Keep experimental artifacts in one of:
@@ -114,7 +125,7 @@ conflict with the book chapters, the book wins.
 - On completion of an experiment, archive a short, decision-focused summary
   outside the public repository and remove noisy scratch notes from active paths.
 
-## Testing policy
+## Testing Policy
 
 - Use temporary directories for data-bearing tests.
 - Never write disposable data to `.tensack`, `.data`, or repository root paths.

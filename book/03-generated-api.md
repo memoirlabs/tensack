@@ -9,6 +9,7 @@ application code. The top-level product verbs are:
 db.get(selector)
 db.watch(selector)
 db.write(change)
+db.write_many(changes)
 ```
 
 For a direct comparison between common SQLite statements and the generated
@@ -49,6 +50,10 @@ db.write(messages::add(row))?;
 db.write(messages::set(row))?;
 db.write(messages::edit(messages::key::id("m1"), patch))?;
 db.write(messages::remove(messages::key::id("m1")))?;
+db.write_many([
+    messages::edit(messages::key::id("m1"), first_patch),
+    messages::edit(messages::key::id("m2"), second_patch),
+])?;
 ```
 
 ## Semantics
@@ -103,8 +108,18 @@ Watches current state as it changes. This is the planned subscription surface.
 Do not claim `watch` is implemented until the runtime can actually keep
 subscribers updated.
 
+### write_many
+
+Applies same-table changes as one storage batch.
+
+- All changes must target the same table.
+- Validation happens before disk writes.
+- The store appends the batch into the current `.ten` segment.
+- This is implemented in the runtime as the fast path for grouped writes.
+
 ## What Not To Do
 
 Do not add a second query language, string selector API, or table-command API as
 the main product surface. Product code should pass generated values into
-`db.get(...)`, future `db.watch(...)`, and `db.write(...)`.
+`db.get(...)`, future `db.watch(...)`, `db.write(...)`, and same-table
+`db.write_many(...)`.

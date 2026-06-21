@@ -9,7 +9,7 @@ schema.tensack  = logical schema truth
 *.ten           = canonical readable table row segments
 *.tenb          = generated cache for row pointers and lookup indexes
 *.tenx          = optional generated full-text search index
-tensack.toml    = readable physical layout and engine state map
+tensack.toml    = readable physical layout and recoverable engine state map
 ```
 
 The important rule:
@@ -20,7 +20,7 @@ tensack.toml, *.tenb, and *.tenx are operational/generated state.
 *.tenb and *.tenx files must be rebuildable from schema.tensack and .ten data.
 ```
 
-## Workspace Shape
+## Database Directory Shape
 
 ```txt
 my-chat.tensack/
@@ -28,12 +28,10 @@ my-chat.tensack/
   tensack.toml
   tables/
     users/
-      zz/
-        zzz.ten
-        zzy.ten
+      zzz.ten
+      zzy.ten
     messages/
-      zz/
-        zzz.ten
+      zzz.ten
   engine/
     users.tenb
     messages.tenb
@@ -65,9 +63,11 @@ Rules:
 - rows belong to normal schema tables.
 - `R` appends a full replacement row.
 - `D` appends a delete tombstone by id.
-- chunk paths use reverse lowercase base-36 names: `<generation>/<chunk>.ten`.
-- generation folders are 2 characters and chunk filenames are 3 characters.
-- the first chunks are `zz/zzz.ten`, `zz/zzy.ten`, `zz/zzx.ten`.
+- writers append to the current segment until the engine rolls to a new chunk.
+- chunk paths use flat reverse lowercase base-36 names: `<chunk>.ten`.
+- chunk filenames are 3 characters and live directly under each table directory.
+- the first chunks are `zzz.ten`, `zzy.ten`, `zzx.ten`.
+- generation folders are not part of the current runtime layout.
 - broken final lines can be ignored during recovery later.
 
 Tabs and newlines inside values are escaped:
@@ -92,9 +92,12 @@ a binary-packed v2 encoding that stores:
 - lookup field/key to row id entries
 
 The runtime rebuilds `.tenb` when it is missing, stale, corrupt, or built for a
-different schema/source hash. Normal id and lookup reads use `.tenb`, then seek
-back into the canonical `.ten` row segment. Legacy text v1 caches can be decoded
-for migration, but they are treated as stale and rebuilt as binary v2 caches.
+different schema/source hash. Hot writes may publish the current `.tenb`
+projection in memory without immediately rewriting the generated `.tenb` file.
+Fresh handles hash canonical `.ten` data lines to reject stale cache bytes and
+rebuild from `.ten`. Normal id and lookup reads use `.tenb`, then seek back into
+the canonical `.ten` row segment. Legacy text v1 caches can be decoded for
+migration, but they are treated as stale and rebuilt as binary v2 caches.
 
 ## Search Index
 
@@ -107,8 +110,9 @@ not affect normal reads.
 Use one root metadata file named `tensack.toml`.
 
 `tensack.toml` is not a second schema. It is the readable map of physical files
-and engine state. It should stay small and should not contain per-row or per-key
-index data.
+and recoverable engine state. It should stay small and should not contain
+per-row or per-key index data. Hot writes may leave counters behind the newest
+`.ten` rows; fresh handles recover from canonical `.ten` data.
 
 Example:
 
@@ -121,15 +125,15 @@ next_tx = 3
 id = 1
 path = "tables/messages"
 next_chunk = 2
-chunks = ["zz/zzz.ten", "zz/zzy.ten"]
 header = "id\tbody"
 
 [tables.messages.index]
 state = "ready"
 file = "engine/messages.tenb"
+source_hash = "..."
 ```
 
-## Current Runtime Scope
+## Runtime Scope
 
 Implemented now:
 
@@ -140,6 +144,7 @@ Implemented now:
 - declared lookup selectors through `.tenb`
 - table scan and count through `.tenb`
 - `tensack.toml` physical layout metadata
+- batch writes that append multiple `R`/`D` operations to one `.ten` chunk
 
 Not implemented yet:
 
