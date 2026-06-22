@@ -2,7 +2,7 @@
 /target/
 **/target/
 
-# Local Sixpack runtime data
+# Local sixpack runtime data
 /.sixpack/
 **/.sixpack/
 
