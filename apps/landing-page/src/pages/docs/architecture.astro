@@ -1,48 +1,153 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const packages = [
+  ["sixpack-core", "shared schema, row, field, lookup, and value types"],
+  ["sixpack-format", "durable .6 and generated cache encoding boundaries"],
+  ["sixpack-store", "local directory-backed storage engine"],
+  ["sixpack", "composed public database API"],
+  ["sixpack-cli", "binary command parsing and execution"],
+  ["sixpack-schema-compiler", "schema! parsing, validation, and Rust output"],
+];
+
+const hotMaps = [
+  ["rows_by_id", "row id -> .6 row pointer"],
+  ["lookup_ids", "lookup field + key -> live row ids"],
+  ["row_lookup_keys", "row id -> lookup keys currently attached to that row"],
+];
+
+const layout = [
+  ["tables/<table>/*.6", "canonical readable row operations"],
+  ["engine/*.6b", "current generated per-table cache files"],
+  ["engine/state.6pack", "target private generated engine-state pack"],
+];
 ---
 
-<BaseLayout title="sixpack Architecture" description="Current sixpack architecture.">
-  <section class="section">
-    <div class="container prose">
-      <p class="eyebrow">Architecture</p>
-      <h1>Readable source data, binary hot state.</h1>
-      <p>
-        sixpack is currently a small local table database. It keeps canonical
-        data in append-only `.6` row segments and treats generated indexes as
-        rebuildable acceleration.
-      </p>
+<BaseLayout title="sixpack architecture" description="Current sixpack runtime architecture.">
+  <article class="doc-page">
+    <section class="doc-hero">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ architecture</p>
+        <h1 class="doc-title">Readable truth, binary hot state.</h1>
+        <p class="doc-lead">
+          sixpack is intentionally table-first. It does not emulate a SQL page
+          engine. It keeps the source data inspectable, then builds generated
+          binary projections for the paths that need to be fast.
+        </p>
+      </div>
+    </section>
 
-      <h2>Storage flow</h2>
-      <pre><code>validate change
-append .6
-update runtime .6b projection
-recover metadata/cache from .6 when needed</code></pre>
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div>
+          <p class="doc-kicker">/ write path</p>
+          <h2 class="doc-section-title">A write is a small pipeline.</h2>
+          <p class="doc-copy">
+            The schema validates the change. The store appends a row operation
+            to the current <code>.6</code> segment. Runtime maps are updated in
+            memory, and generated binary state can be materialized as a
+            recoverable cache boundary.
+          </p>
+        </div>
+        <pre class="doc-code"><code>validate change
+append .6 row operation
+update runtime projection
+publish generated engine state
+refresh recoverable metadata</code></pre>
+      </div>
+    </section>
 
-      <h2>Runtime projection</h2>
-      <p>
-        The hot projection is map-backed in memory. This keeps normal reads and
-        edits off full-table traversal paths.
-      </p>
-      <pre><code>rows_by_id        row id -> .6 row pointer
-lookup_ids        lookup field + key -> row ids
-row_lookup_keys   row id -> lookup keys currently attached to that row</code></pre>
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div>
+          <p class="doc-kicker">/ read path</p>
+          <h2 class="doc-section-title">Reads start from indexes.</h2>
+          <p class="doc-copy">
+            Point reads and declared lookups resolve through generated binary
+            state first. The pointer then resolves to the canonical row bytes in
+            <code>.6</code>. Scans are still available, but normal application
+            access is meant to use ids and declared lookup fields.
+          </p>
+        </div>
+        <pre class="doc-code"><code>selector
+  -> generated row pointer or lookup entries
+  -> .6 segment slice
+  -> decoded typed row</code></pre>
+      </div>
+    </section>
 
-      <h2>Edit path</h2>
-      <p>
-        A patch resolves the row, appends the replacement operation, removes
-        only that row's old lookup keys, inserts the new lookup keys, and
-        updates the row pointer. The compact `.6b` file can be materialized
-        from the runtime map when the engine needs a durable cache boundary.
-      </p>
+    <section class="doc-block">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ runtime projection</p>
+        <h2 class="doc-section-title">The hot maps are deliberately small.</h2>
+        <div class="doc-table">
+          {hotMaps.map(([name, body]) => (
+            <div>
+              <strong>{name}</strong>
+              <span>{body}</span>
+            </div>
+          ))}
+        </div>
+        <p class="doc-copy">
+          This is the main performance idea in the current engine: edits do not
+          need to traverse the whole table to detach old lookup keys, and reads
+          do not need to walk every row to answer common selectors.
+        </p>
+      </div>
+    </section>
 
-      <h2>Current limits</h2>
-      <ul>
-        <li>`db.watch(...)` live subscriptions are planned.</li>
-        <li>`.6x` full-text search is reserved but not implemented.</li>
-        <li>Compaction and segment sealing are not implemented yet.</li>
-        <li>SQLite remains much faster for large transactional update batches.</li>
-      </ul>
-    </div>
-  </section>
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div class="doc-panel">
+          <h2>Concurrency model</h2>
+          <p>
+            The current store is built for one local application process. Writes
+            are serialized inside the process at the table boundary, while reads
+            use the generated projection state. Cross-process write coordination
+            is not part of the current public guarantee.
+          </p>
+        </div>
+        <div class="doc-panel">
+          <h2>Recovery model</h2>
+          <p>
+            <code>.6</code> source data is authoritative. <code>sixpack.toml</code>,
+            current <code>.6b</code> files, target <code>state.6pack</code>,
+            and future <code>.6x</code> files are operational state that can be
+            checked, refreshed, or rebuilt from schema plus <code>.6</code>
+            data when needed.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc-block">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ storage atlas</p>
+        <h2 class="doc-section-title">Readable tables, private generated state.</h2>
+        <div class="doc-table">
+          {layout.map(([name, body]) => (
+            <div>
+              <strong>{name}</strong>
+              <span>{body}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="doc-block">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ crate boundaries</p>
+        <h2 class="doc-section-title">Packages stay separated by responsibility.</h2>
+        <div class="doc-table">
+          {packages.map(([name, body]) => (
+            <div>
+              <strong>{name}</strong>
+              <span>{body}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  </article>
 </BaseLayout>

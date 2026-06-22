@@ -8,6 +8,7 @@ storage decision spec.
 schema.sixpack  = logical schema truth
 *.6           = canonical readable table row segments
 *.6b          = generated cache for row pointers and lookup indexes
+state.6pack   = target generated engine-state pack
 *.6x          = optional generated full-text search index
 sixpack.toml    = readable physical layout and recoverable engine state map
 ```
@@ -16,11 +17,14 @@ The important rule:
 
 ```txt
 schema.sixpack + tables/**/*.6 are truth.
-sixpack.toml, *.6b, and *.6x are operational/generated state.
-*.6b and *.6x files must be rebuildable from schema.sixpack and .6 data.
+sixpack.toml, *.6b, state.6pack, and *.6x are operational/generated state.
+*.6b, state.6pack, and *.6x files must be rebuildable from schema.sixpack
+and .6 data.
 ```
 
 ## Database Directory Shape
+
+Current implementation:
 
 ```txt
 my-chat.sixpack/
@@ -40,6 +44,25 @@ my-chat.sixpack/
 
 `.6x` is optional and should only exist once full-text search is implemented
 for a table.
+
+Target generated-state shape:
+
+```txt
+my-chat.sixpack/
+  schema.sixpack
+  sixpack.toml
+  tables/
+    users/
+      zzz.6
+      zzy.6
+    messages/
+      zzz.6
+  engine/
+    state.6pack
+```
+
+The target keeps the database as a readable folder while hiding private binary
+engine state behind one rebuildable pack file.
 
 ## Readable Row Files
 
@@ -99,6 +122,10 @@ rebuild from `.6`. Normal id and lookup reads use `.6b`, then seek back into
 the canonical `.6` row segment. Legacy text v1 caches can be decoded for
 migration, but they are treated as stale and rebuilt as binary v2 caches.
 
+The target direction is to move generated row pointers, lookup maps, counts,
+source hashes, and future generated search state into `engine/state.6pack`.
+That file must remain private generated state, not canonical user data.
+
 ## Search Index
 
 `.6x` is reserved for optional full-text search. Exact id lookup, declared
@@ -151,3 +178,4 @@ Not implemented yet:
 - segment sealing/compaction
 - repair CLI
 - `.6x` full-text search
+- `engine/state.6pack` replacing per-table `.6b` cache files

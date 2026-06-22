@@ -236,7 +236,9 @@ binary generated state and are strong in this workload. Append batches are now
 competitive in this local path because sixpack writes one readable segment and
 updates a runtime projection map. SQLite transactions are still much faster for
 large update batches. The next engine target is to keep the readable `.6`
-source while reducing patch construction and row rewrite overhead.
+source while reducing patch construction and row rewrite overhead, and to move
+private generated engine state toward one rebuildable `engine/state.6pack`
+pack.
 
 ## Repository Layout
 
@@ -250,14 +252,20 @@ packages/sixpack-schema-compiler schema! parser, validator, codegen
 packages/sixpack-testkit         shared test helpers
 apps/sixpack                     runnable CLI binary
 apps/test-lab                    isolated experiments and generated examples
+apps/admin-ui                    planned local viewer/admin surface
+apps/landing-page                public docs/site surface
 benchmark                        Criterion benchmarks
 tests/contracts                  public behavior contracts
+tests/snapshots                  reviewed snapshot regression assets
 packages/docs                    public format and command docs
 book                             design book and implementation notes
+book/decisions                   accepted architecture decisions
+user-scripts                     local install scripts
 ```
 
 Start with:
 
+- [Atlas](book/00-atlas.md)
 - [File layout](packages/docs/file-format.md)
 - [Command surface](packages/docs/commands.md)
 - [Product shape](book/01-product-shape.md)

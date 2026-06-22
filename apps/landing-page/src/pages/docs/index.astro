@@ -3,42 +3,52 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 
 const docs = [
   {
+    href: "/docs/overview",
+    title: "Overview",
+    body: "What sixpack is, where it fits, and what is implemented today.",
+  },
+  {
     href: "/docs/architecture",
     title: "Architecture",
-    body: "The current runtime shape: readable append data, runtime maps, and generated binary cache snapshots.",
+    body: "The runtime shape: typed schema, readable append source, and private generated state.",
   },
   {
     href: "/docs/file-format",
     title: "File format",
-    body: "The current `.6`, `.6b`, `.6x`, and `sixpack.toml` layout.",
+    body: "Current `.6b` cache files and the target `engine/state.6pack` layout.",
   },
   {
     href: "/docs/commands",
-    title: "CLI commands",
-    body: "The intentionally small command surface implemented today.",
+    title: "CLI",
+    body: "The intentionally small command surface available in the current binary.",
   },
 ];
 ---
 
-<BaseLayout title="sixpack Docs" description="Current sixpack documentation.">
-  <section class="section">
-    <div class="container prose">
-      <p class="eyebrow">Docs</p>
-      <h1>Current behavior only.</h1>
-      <p class="lead">
-        These pages describe what the repository implements today. Planned
-        features are called out separately when needed.
-      </p>
-    </div>
-  </section>
-  <section class="section">
-    <div class="container doc-grid">
-      {docs.map((doc) => (
-        <a class="card" href={doc.href}>
-          <h3>{doc.title}</h3>
-          <p>{doc.body}</p>
-        </a>
-      ))}
-    </div>
-  </section>
+<BaseLayout title="sixpack docs" description="Current sixpack documentation.">
+  <article class="doc-page">
+    <section class="doc-hero">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ docs</p>
+        <h1 class="doc-title">Readable local storage, typed application code.</h1>
+        <p class="doc-lead">
+          These pages describe the current sixpack design and behavior. Planned
+          work is called out separately so the docs stay honest about what ships
+          now and what is still reserved.
+        </p>
+      </div>
+    </section>
+
+    <section class="doc-block">
+      <div class="doc-wrap doc-card-grid">
+        {docs.map((doc) => (
+          <a class="doc-card" href={doc.href}>
+            <span>{doc.href.replace("/docs/", "")}</span>
+            <h2>{doc.title}</h2>
+            <p>{doc.body}</p>
+          </a>
+        ))}
+      </div>
+    </section>
+  </article>
 </BaseLayout>

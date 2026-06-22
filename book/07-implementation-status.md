@@ -23,6 +23,7 @@ This chapter is the honesty check.
 - delete tombstones
 - binary `.6b` v2 cache encoding/decoding
 - legacy text `.6b` decode for rebuild migration
+- target `engine/state.6pack` pack documented, not implemented
 
 ### Store
 
@@ -77,3 +78,4 @@ This chapter is the honesty check.
 - compaction
 - `.6x`
 - durable cursor format
+- single generated `engine/state.6pack` file replacing per-table `.6b` files

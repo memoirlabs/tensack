@@ -1,6 +1,7 @@
 # Summary
 
 - [Internal Book](README.md)
+- [Atlas](00-atlas.md)
 - [Design Philosophy](00-design-philosophy.md)
 - [Product Shape](01-product-shape.md)
 - [Schema](02-schema.md)
@@ -16,4 +17,5 @@
 - [Schema Compiler](12-schema-compiler.md)
 - [SQLite Mapping](13-sqlite-mapping.md)
 - [Write Engine](14-write-engine.md)
+- [Decisions](decisions/0001-generated-engine-state-pack.md)
 - [Reference Archive](reference/README.md)

@@ -18,7 +18,20 @@ engine/*.6x
 
 Generated state must be rebuildable.
 
+The target direction is still a directory database with readable table folders,
+but generated binary engine state should collapse behind one private pack file:
+
+```txt
+engine/state.6pack
+```
+
+That pack is not primary data. It is an engine-owned rebuildable speed layer.
+The active decision record is
+[decisions/0001-generated-engine-state-pack.md](decisions/0001-generated-engine-state-pack.md).
+
 ## Directory Shape
+
+Current implementation:
 
 ```txt
 my-chat.sixpack/
@@ -33,6 +46,22 @@ my-chat.sixpack/
   engine/
     messages.6b
     users.6b
+```
+
+Target direction:
+
+```txt
+my-chat.sixpack/
+  schema.sixpack
+  sixpack.toml
+  tables/
+    messages/
+      zzz.6
+      zzy.6
+    users/
+      zzz.6
+  engine/
+    state.6pack
 ```
 
 ## Chunk Naming
@@ -108,6 +137,8 @@ The store owns:
 - `.6b` rebuilds
 - row pointer reads
 - lookup/cache operations
+- the boundary that decides whether generated state is stored as per-table
+  `.6b` files today or a single `state.6pack` later
 
 Normal writes keep metadata compact and recoverable. Chunk lists are derived by
 scanning the table directory when needed; they are not rewritten into
@@ -119,3 +150,7 @@ Hot writes append to the current `.6` segment until the store rolls to a new
 chunk. They may publish the generated `.6b` projection in memory and leave the
 on-disk `.6b` file stale; later database handles hash canonical `.6` data
 lines to detect stale `.6b` bytes and rebuild generated state.
+
+As the engine moves to `engine/state.6pack`, this invariant stays the same:
+generated binary state may lag, but canonical `.6` data must be enough to
+recover it.

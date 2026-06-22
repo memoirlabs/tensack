@@ -1,0 +1,103 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const current = [
+  "typed schema primitives and row validation",
+  "append-only .6 put/delete row operations",
+  "generated .6b row pointer and lookup cache state",
+  "hot runtime maps for ids, lookups, counts, and edits",
+  "db.get, db.write, and same-table db.write_many",
+  "schema compiler parsing, validation, and raw Rust output",
+  "CLI help and version commands",
+];
+
+const planned = [
+  "db.watch(...) live subscriptions",
+  "repair and inspect CLI commands",
+  "local admin UI",
+  ".6x full-text search",
+  "compaction and segment sealing",
+  "stable generated API snapshots",
+  "one private engine/state.6pack file for generated engine state",
+];
+---
+
+<BaseLayout title="sixpack overview" description="What sixpack is and how it works today.">
+  <article class="doc-page">
+    <section class="doc-hero">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ overview</p>
+        <h1 class="doc-title">The local database humans can read.</h1>
+        <p class="doc-lead">
+          sixpack is a local-first table database for Rust applications and
+          tools that want fast local state without turning the data directory
+          into an opaque blob. The source data stays readable. The hot path uses
+          generated binary structures that can be rebuilt from the folder data.
+        </p>
+      </div>
+    </section>
+
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div>
+          <p class="doc-kicker">/ model</p>
+          <h2 class="doc-section-title">Schema first, storage second.</h2>
+          <p class="doc-copy">
+            Applications define tables, fields, and lookups in schema-shaped
+            code. sixpack validates changes against that model, appends durable
+            row operations to <code>.6</code> files, and keeps generated
+            binary state for fast ids, lookups, counts, and edits.
+          </p>
+        </div>
+        <pre class="doc-code"><code>schema.sixpack  logical schema
+tables/*.6      readable source data
+engine/*.6b     current generated binary hot state
+state.6pack     target private engine-state pack
+engine/*.6x     planned search index
+sixpack.toml    recoverable engine metadata</code></pre>
+      </div>
+    </section>
+
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div class="doc-panel">
+          <h2>What it is</h2>
+          <ul class="doc-list">
+            <li>a local directory-backed database layer</li>
+            <li>a typed Rust API over table data</li>
+            <li>a readable canonical file format with binary acceleration</li>
+            <li>a small engine optimized for one local application process</li>
+          </ul>
+        </div>
+        <div class="doc-panel">
+          <h2>What it is not</h2>
+          <ul class="doc-list">
+            <li>not a SQL engine</li>
+            <li>not a hosted database service</li>
+            <li>not a replacement for SQLite transactions yet</li>
+            <li>not exposing storage internals as normal user API</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div>
+          <p class="doc-kicker">/ current scope</p>
+          <h2 class="doc-section-title">Implemented today.</h2>
+          <ul class="doc-list">
+            {current.map((item) => <li>{item}</li>)}
+          </ul>
+        </div>
+        <div>
+          <p class="doc-kicker">/ reserved</p>
+          <h2 class="doc-section-title">Planned next.</h2>
+          <ul class="doc-list">
+            {planned.map((item) => <li>{item}</li>)}
+          </ul>
+        </div>
+      </div>
+    </section>
+  </article>
+</BaseLayout>

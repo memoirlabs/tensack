@@ -4,6 +4,8 @@ The durable readable row format is `.6`.
 
 The generated lookup/cache format is `.6b`.
 
+The target generated engine-state pack is `state.6pack`.
+
 The future generated full-text format is `.6x`.
 
 ## `.6`
@@ -44,6 +46,24 @@ It stores:
 
 The encoding is internal. It can change as long as it remains rebuildable from
 schema plus `.6`.
+
+Current storage writes `.6b` per table. The target storage direction is to move
+that generated state into one private pack file at `engine/state.6pack`.
+
+## `state.6pack`
+
+Reserved for the generated engine-state pack.
+
+It should contain only rebuildable internal state, such as:
+
+- table row pointers
+- lookup maps
+- live counts
+- source hashes
+- future generated search state
+
+It must not become canonical user data. If the file is missing or stale, the
+store rebuilds it from schema plus `.6` rows.
 
 ## `.6x`
 

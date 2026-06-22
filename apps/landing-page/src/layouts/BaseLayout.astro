@@ -8,9 +8,9 @@ interface Props {
 
 const { title, description } = Astro.props;
 const nav = [
-  { href: "/alt", label: "Alt Home" },
-  { href: "/", label: "Overview" },
+  { href: "/", label: "Home" },
   { href: "/docs", label: "Docs" },
+  { href: "/docs/overview", label: "Overview" },
   { href: "/docs/architecture", label: "Architecture" },
   { href: "/docs/file-format", label: "Format" },
   { href: "/docs/commands", label: "CLI" },
@@ -47,7 +47,7 @@ const nav = [
     </main>
     <footer class="site-footer-shell">
       <div class="site-footer">
-        <span>Local-first table storage for typed Rust applications.</span>
+        <span>The local database humans can read.</span>
         <a href="https://github.com/sixpack/sixpack">GitHub</a>
       </div>
     </footer>

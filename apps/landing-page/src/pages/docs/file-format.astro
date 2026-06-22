@@ -1,48 +1,172 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const files = [
+  ["schema.sixpack", "logical schema truth"],
+  ["tables/**/*.6", "canonical append-only row operations"],
+  ["engine/*.6b", "current generated binary row pointers and lookup indexes"],
+  ["engine/state.6pack", "target private generated engine-state pack"],
+  ["engine/*.6x", "reserved generated full-text index"],
+  ["sixpack.toml", "compact recoverable engine metadata"],
+];
 ---
 
-<BaseLayout title="sixpack File Format" description="Current sixpack file layout.">
-  <section class="section">
-    <div class="container prose">
-      <p class="eyebrow">File format</p>
-      <h1>One source of truth.</h1>
-      <p>
-        The current local store treats schema and `.6` data as truth. Metadata
-        and generated caches are operational state.
-      </p>
+<BaseLayout title="sixpack file format" description="Current sixpack file layout and format rules.">
+  <article class="doc-page">
+    <section class="doc-hero">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ file format</p>
+        <h1 class="doc-title">One durable source, rebuildable acceleration.</h1>
+        <p class="doc-lead">
+          A sixpack directory separates human-readable truth from generated
+          runtime state. <code>schema.sixpack</code> and <code>.6</code> table
+          segments are canonical. Binary files exist to make normal access fast.
+          The target direction keeps those binary internals in one private
+          rebuildable engine-state pack.
+        </p>
+      </div>
+    </section>
 
-      <pre><code>schema.sixpack  logical schema truth
-tables/*.6    canonical append-only row operations
-engine/*.6b   generated binary row pointers and lookup indexes
-engine/*.6x   optional generated full-text index, planned
-sixpack.toml    compact recoverable engine metadata</code></pre>
+    <section class="doc-block">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ layout</p>
+        <h2 class="doc-section-title">Database directory today.</h2>
+        <pre class="doc-code"><code>my-app.sixpack/
+  schema.sixpack
+  sixpack.toml
+  tables/
+    users/
+      zzz.6
+      zzy.6
+    messages/
+      zzz.6
+  engine/
+    users.6b
+    messages.6b
+    messages.6x</code></pre>
+        <div class="doc-table">
+          {files.map(([name, body]) => (
+            <div>
+              <strong>{name}</strong>
+              <span>{body}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
 
-      <h2>Readable row files</h2>
-      <p>
-        `.6` files are readable table row segments. `R` appends a full
-        replacement row. `D` appends a delete tombstone by id.
-      </p>
-      <pre><code>SIX&lt;TAB&gt;1&lt;TAB&gt;table&lt;TAB&gt;messages&lt;TAB&gt;&lt;schema_hash&gt;
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div>
+          <p class="doc-kicker">/ target layout</p>
+          <h2 class="doc-section-title">One generated state pack.</h2>
+          <p class="doc-copy">
+            The folder remains the database. Table directories remain readable.
+            Generated row pointers, lookup maps, counts, source hashes, and
+            future search state move behind one private rebuildable file.
+          </p>
+        </div>
+        <pre class="doc-code"><code>my-app.sixpack/
+  schema.sixpack
+  sixpack.toml
+  tables/
+    users/
+      zzz.6
+      zzy.6
+    messages/
+      zzz.6
+  engine/
+    state.6pack</code></pre>
+      </div>
+    </section>
+
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div>
+          <p class="doc-kicker">/ .6</p>
+          <h2 class="doc-section-title">Readable row segments.</h2>
+          <p class="doc-copy">
+            <code>.6</code> files are append-only table segments. <code>R</code>
+            records write a full replacement row. <code>D</code> records write
+            a delete tombstone by id. The table can be recovered by replaying
+            the segment operations in order.
+          </p>
+        </div>
+        <pre class="doc-code"><code>SIX&lt;TAB&gt;1&lt;TAB&gt;table&lt;TAB&gt;messages&lt;TAB&gt;&lt;schema_hash&gt;
 @field&lt;TAB&gt;id&lt;TAB&gt;id
 @field&lt;TAB&gt;body&lt;TAB&gt;text
 @lookup&lt;TAB&gt;id&lt;TAB&gt;unique
 @data
 R&lt;TAB&gt;1&lt;TAB&gt;m1&lt;TAB&gt;hello
 D&lt;TAB&gt;2&lt;TAB&gt;m1</code></pre>
+      </div>
+    </section>
 
-      <h2>Generated cache</h2>
-      <p>
-        `.6b` is a generated binary cache for row pointers and lookup indexes.
-        It is rebuilt when missing, stale, corrupt, or built for a different
-        schema/source hash.
-      </p>
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div class="doc-panel">
+          <h2>Escaping</h2>
+          <p>
+            Text values escape backslash, tab, newline, and carriage return as
+            <code>\\</code>, <code>\t</code>, <code>\n</code>, and <code>\r</code>.
+            This keeps row lines readable while preserving field boundaries.
+          </p>
+        </div>
+        <div class="doc-panel">
+          <h2>Chunk names</h2>
+          <p>
+            Table chunks use reverse lowercase base36 names such as
+            <code>zzz.6</code>, <code>zzy.6</code>, and <code>zzx.6</code>. The
+            naming keeps segment order stable without exposing database
+            internals as user API.
+          </p>
+        </div>
+      </div>
+    </section>
 
-      <h2>Search index</h2>
-      <p>
-        `.6x` is reserved for optional full-text search. Missing `.6x` files
-        do not affect normal reads.
-      </p>
-    </div>
-  </section>
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div>
+          <p class="doc-kicker">/ .6b</p>
+          <h2 class="doc-section-title">Generated binary lookup state.</h2>
+          <p class="doc-copy">
+            <code>.6b</code> files store the binary cache boundary for a table:
+            format version, table name, schema hash, source hash, live row
+            pointers, and lookup entries. If the cache is missing or stale, it
+            can be rebuilt from schema plus <code>.6</code>. The target
+            <code>state.6pack</code> file keeps that same generated-state role
+            while hiding the per-table cache files.
+          </p>
+        </div>
+        <pre class="doc-code"><code>table cache
+  version
+  schema hash
+  source hash
+  row id -> row pointer
+  lookup field + key -> row ids</code></pre>
+      </div>
+    </section>
+
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div class="doc-panel">
+          <h2>sixpack.toml</h2>
+          <p>
+            Metadata is compact and recoverable. It tracks physical layout and
+            engine counters, but it is not the schema and it is not the row
+            index. Fresh handles can recover counters from canonical
+            <code>.6</code> data.
+          </p>
+        </div>
+        <div class="doc-panel">
+          <h2>.6x</h2>
+          <p>
+            <code>.6x</code> is reserved for optional generated full-text
+            search. Missing <code>.6x</code> files do not affect ids, lookups,
+            scans, counts, or normal row reads.
+          </p>
+        </div>
+      </div>
+    </section>
+  </article>
 </BaseLayout>

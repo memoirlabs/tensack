@@ -18,93 +18,663 @@ db.write(messages::add(messages::Row {
 }))?;
 
 let thread = db.get(messages::by::conversation_id("cv1"))?;`;
+
+const metrics = [
+  { op: "get by id", sixpack: "0.50 ms", lite: "3.19 ms", win: true },
+  { op: "count", sixpack: "26 µs", lite: "3.10 ms", win: true },
+  { op: "add one-by-one", sixpack: "38.7 ms", lite: "301.1 ms", win: true },
+  { op: "add batched", sixpack: "4.28 ms", lite: "6.83 ms", win: true },
+  { op: "edit one-by-one", sixpack: "38.8 ms", lite: "5.69 ms", win: false },
+  { op: "edit batched", sixpack: "5.13 ms", lite: "0.52 ms", win: false },
+];
+
+const features = [
+  {
+    n: "01",
+    title: "Schema-shaped API",
+    body: "The schema defines rows, selectors, and write changes. Application code never touches a query string.",
+  },
+  {
+    n: "02",
+    title: "Readable truth",
+    body: ".6 segments stay the canonical append source. Generated files can be discarded and rebuilt at will.",
+  },
+  {
+    n: "03",
+    title: "Private engine state",
+    body: "Generated binary state is rebuildable. Today it is per-table .6b; the target is one private engine/state.6pack file.",
+  },
+];
+
+const flow = [
+  { tag: "schema", body: "declared tables and lookups" },
+  { tag: "generated API", body: "selectors and changes, no SQL strings" },
+  { tag: ".6", body: "readable append-only source data", focus: true },
+  { tag: "runtime projection", body: "hot ids, lookups, counts, edits", focus: true },
+  { tag: "engine state", body: "current .6b caches, target state.6pack" },
+];
+
+const layoutRows = [
+  ["tables/<table>/*.6", "readable canonical row operations", "implemented"],
+  ["engine/*.6b", "per-table generated lookup/cache files", "current"],
+  ["engine/state.6pack", "one private rebuildable generated state pack", "target"],
+];
 ---
 
 <BaseLayout
   title="sixpack"
   description="A local-first table database layer for typed Rust applications."
 >
-  <section class="section">
-    <div class="container hero">
-      <div>
-        <p class="eyebrow">local-first table storage</p>
-        <h1>the local database humans can read.</h1>
-        <p class="lead">
-          sixpack is for apps that want fast local data without turning their
-          state into a black box. Write with typed Rust APIs, inspect the files
-          when something breaks, and keep the hot path binary.
-        </p>
-        <div class="actions">
-          <a class="button primary" href="/docs">Read the docs</a>
-          <a class="button" href="https://github.com/sixpack/sixpack">View source</a>
+  <div class="home">
+    <div class="grain" aria-hidden="true"></div>
+
+    <section class="hero">
+      <div class="wrap">
+        <span class="eyebrow"><span class="dot"></span>local-first storage engine</span>
+        <h1 class="display">
+          The local database<br />
+          humans can <span class="ital">read.</span>
+        </h1>
+        <div class="hero-grid">
+          <p class="lead-lg">
+            Build local apps without hiding state inside an opaque file. sixpack
+            keeps the database as a readable folder, your API typed, and the
+            generated engine state private where speed actually matters.
+          </p>
+          <div class="hero-side">
+            <div class="actions">
+              <a class="cta cta-primary" href="/docs">Read the docs &rarr;</a>
+              <a class="cta cta-ghost" href="https://github.com/sixpack/sixpack">View source</a>
+            </div>
+            <p class="hero-note">v0 scaffold · readable table folders · private generated state</p>
+          </div>
         </div>
       </div>
-      <div class="panel diagram" aria-label="sixpack storage flow">
-        <div class="node"><strong>schema</strong><span>declared tables and lookups</span></div>
-        <div class="node"><strong>typed API</strong><span>selectors and changes, no SQL strings</span></div>
-        <div class="node focus"><strong>.6</strong><span>readable append-only source data</span></div>
-        <div class="node focus"><strong>runtime .6b map</strong><span>hot ids, lookups, counts, and edits</span></div>
-        <div class="node"><strong>compact .6b</strong><span>rebuildable binary cache snapshot</span></div>
+    </section>
+
+    <section class="stats">
+      <div class="wrap stat-grid">
+        <div class="stat">
+          <span class="stat-num">6.4&times;</span>
+          <span class="stat-label">faster reads vs SQLite</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num">.6</span>
+          <span class="stat-label">canonical readable row data</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num">0</span>
+          <span class="stat-label">SQL strings in app code</span>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section">
-    <div class="container">
-      <div class="grid">
-        <article class="card">
-          <h3>Schema-shaped API</h3>
-          <p>No SQL strings in application code. The schema defines rows, selectors, and write changes.</p>
-        </article>
-        <article class="card">
-          <h3>Readable truth</h3>
-          <p>`.6` segments remain the canonical append source. Generated files can be discarded and rebuilt.</p>
-        </article>
-        <article class="card">
-          <h3>Binary hot state</h3>
-          <p>Runtime `.6b` maps keep ids, lookups, counts, and edits off full-table traversal paths.</p>
-        </article>
+    <section class="block">
+      <div class="wrap">
+        <p class="kicker">/ principles</p>
+        <div class="features">
+          {features.map((f) => (
+            <article class="feature">
+              <span class="feature-n">{f.n}</span>
+              <h3>{f.title}</h3>
+              <p>{f.body}</p>
+            </article>
+          ))}
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section">
-    <div class="container prose">
-      <h2>Current benchmark snapshot</h2>
-      <p>
-        Results are from the current local hot-path benchmark: 10,000 rows
-        preloaded once, one live database handle, and 1,000 operations per
-        Criterion iteration.
-      </p>
-      <table class="metric-table">
-        <thead>
-          <tr>
-            <th>Operation</th>
-            <th>sixpack</th>
-            <th>SQLite</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>get by id</td><td>~0.50 ms</td><td>~3.19 ms</td></tr>
-          <tr><td>count</td><td>~26 us</td><td>~3.10 ms</td></tr>
-          <tr><td>add one-by-one</td><td>~38.7 ms</td><td>~301.1 ms</td></tr>
-          <tr><td>add batched</td><td>~4.28 ms</td><td>~6.83 ms</td></tr>
-          <tr><td>edit one-by-one</td><td>~38.8 ms</td><td>~5.69 ms</td></tr>
-          <tr><td>edit batched</td><td>~5.13 ms</td><td>~0.52 ms</td></tr>
-        </tbody>
-      </table>
-      <p>
-        SQLite remains much faster for large transactional update batches. The
-        current sixpack advantage is narrow: readable append data with fast
-        generated runtime projections for local state workloads.
-      </p>
-    </div>
-  </section>
+    <section class="block">
+      <div class="wrap split">
+        <div class="split-copy">
+          <p class="kicker">/ storage flow</p>
+          <h2 class="head-lg">From schema<br />to readable bytes.</h2>
+          <p class="muted">
+            Every write travels a predictable path. The append log is the source
+            of truth; everything downstream is a cache that can vanish and
+            regenerate without losing a row.
+          </p>
+        </div>
+        <div class="flow">
+          {flow.map((n, i) => (
+            <div class={`flow-node ${n.focus ? "is-focus" : ""}`}>
+              <span class="flow-i">{String(i + 1).padStart(2, "0")}</span>
+              <div>
+                <strong>{n.tag}</strong>
+                <span>{n.body}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
 
-  <section class="section">
-    <div class="container prose">
-      <h2>Minimal syntax</h2>
-      <pre><code>{schemaSnippet}</code></pre>
-    </div>
-  </section>
+    <section class="block">
+      <div class="wrap split">
+        <div class="split-copy">
+          <p class="kicker">/ disk shape</p>
+          <h2 class="head-lg">A folder database,<br />not a black box.</h2>
+          <p class="muted">
+            The public shape stays obvious: table folders hold readable
+            <code>.6</code> data. Generated binary state is private and
+            rebuildable; the target is to collapse it into one engine-owned pack.
+          </p>
+        </div>
+        <div class="layout-table">
+          {layoutRows.map(([path, body, status]) => (
+            <div class={`layout-row layout-${status}`}>
+              <span>{status}</span>
+              <strong>{path}</strong>
+              <p>{body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="wrap">
+        <p class="kicker">/ benchmark snapshot</p>
+        <h2 class="head-lg">Honest numbers.</h2>
+        <p class="muted bench-note">
+          10,000 rows preloaded once, one live handle, 1,000 operations per
+          Criterion iteration. SQLite still wins big transactional update
+          batches — we show that too.
+        </p>
+        <div class="bench">
+          {metrics.map((m) => (
+            <div class="bench-row">
+              <span class="bench-op">{m.op}</span>
+              <span class={`pill ${m.win ? "pill-win" : "pill-lose"}`}>sixpack {m.sixpack}</span>
+              <span class="pill pill-neutral">sqlite {m.lite}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="wrap">
+        <p class="kicker">/ minimal syntax</p>
+        <h2 class="head-lg">Declare it once.</h2>
+        <div class="code-shell">
+          <div class="code-bar" aria-hidden="true">
+            <span></span><span></span><span></span>
+            <em>messages.rs</em>
+          </div>
+          <pre class="code-body"><code>{schemaSnippet}</code></pre>
+        </div>
+      </div>
+    </section>
+  </div>
 </BaseLayout>
+
+<style>
+  .home {
+    --accent: #b6f23d;
+    --accent-bright: #cdff63;
+    --accent-soft: rgba(182, 242, 61, 0.13);
+    --accent-line: rgba(182, 242, 61, 0.4);
+    position: relative;
+    font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* visible film grain: no blend mode, light specks over black */
+  .grain {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    width: min(1120px, calc(100% - 32px));
+    margin: 0 auto;
+  }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    display: block;
+    grid-template-columns: none;
+    gap: 0;
+    align-items: initial;
+    padding: clamp(44px, 7vw, 84px) 0 clamp(32px, 4vw, 52px);
+  }
+
+  .eyebrow {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    background: var(--accent-bright);
+  }
+
+  .display {
+    position: relative;
+    z-index: 1;
+    margin: 18px 0 0;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: clamp(52px, 9vw, 110px);
+    font-weight: 600;
+    line-height: 0.9;
+    letter-spacing: -0.035em;
+    color: var(--ink);
+  }
+
+  .ital {
+    font-family: "Newsreader", Georgia, serif;
+    font-style: italic;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--accent-bright);
+  }
+
+  .hero-grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    gap: clamp(24px, 5vw, 56px);
+    align-items: end;
+    margin-top: clamp(24px, 3vw, 36px);
+  }
+
+  .lead-lg {
+    max-width: 50ch;
+    color: var(--muted);
+    font-size: clamp(17px, 1.7vw, 21px);
+    line-height: 1.5;
+  }
+
+  .hero-side {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 50px;
+    padding: 13px 22px;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .cta-primary {
+    background: var(--accent);
+    color: #0d1a00;
+    border: 1px solid var(--accent);
+  }
+
+  .cta-primary:hover {
+    background: var(--accent-bright);
+    border-color: var(--accent-bright);
+  }
+
+  .cta-ghost {
+    background: transparent;
+    border: 1px solid var(--line-strong);
+    color: var(--ink);
+  }
+
+  .cta:hover {
+    transform: translateY(-2px);
+  }
+
+  .cta-ghost:hover {
+    border-color: var(--accent-line);
+  }
+
+  .hero-note {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    color: var(--muted-soft);
+  }
+
+  /* ---------- stats ---------- */
+  .stats {
+    position: relative;
+    z-index: 1;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .stat {
+    padding: clamp(28px, 4vw, 44px) 0;
+    padding-right: 24px;
+  }
+
+  .stat + .stat {
+    padding-left: clamp(24px, 4vw, 48px);
+    border-left: 1px solid var(--line);
+  }
+
+  .stat-num {
+    display: block;
+    font-size: clamp(38px, 6vw, 68px);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--ink);
+  }
+
+  .pct {
+    color: var(--accent-bright);
+  }
+
+  .stat-label {
+    display: block;
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  /* ---------- generic block ---------- */
+  .block {
+    position: relative;
+    z-index: 1;
+    padding: clamp(52px, 8vw, 100px) 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .kicker {
+    margin: 0 0 28px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    color: var(--accent-bright);
+  }
+
+  .head-lg {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: clamp(32px, 5.2vw, 60px);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 0.98;
+    color: var(--ink);
+  }
+
+  .muted {
+    margin-top: 20px;
+    max-width: 56ch;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.55;
+  }
+
+  /* ---------- features ---------- */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: 1px solid var(--line);
+  }
+
+  .feature {
+    padding: 32px 28px 36px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .feature + .feature {
+    border-left: 1px solid var(--line);
+  }
+
+  .feature-n {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px;
+    color: var(--accent-bright);
+  }
+
+  .feature h3 {
+    margin: 18px 0 12px;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .feature p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  /* ---------- split / flow ---------- */
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+    gap: clamp(32px, 6vw, 72px);
+    align-items: start;
+  }
+
+  .flow {
+    display: grid;
+    gap: 8px;
+  }
+
+  .flow-node {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.015);
+    transition: border-color 0.15s ease;
+  }
+
+  .flow-i {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: var(--muted-soft);
+  }
+
+  .flow-node.is-focus {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+  }
+
+  .flow-node.is-focus .flow-i {
+    color: var(--accent-bright);
+  }
+
+  .flow-node strong {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  .flow-node span {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  /* ---------- layout table ---------- */
+  .layout-table {
+    display: grid;
+    border-top: 1px solid var(--line);
+  }
+
+  .layout-row {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.24fr) minmax(180px, 0.42fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    border-bottom: 1px solid var(--line);
+    padding: 18px 0;
+  }
+
+  .layout-row span {
+    width: fit-content;
+    border: 1px solid var(--line);
+    padding: 3px 8px;
+    color: var(--muted-soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .layout-row strong {
+    color: var(--accent-bright);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .layout-row p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .layout-target span {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent-bright);
+  }
+
+  /* ---------- bench ---------- */
+  .bench-note {
+    margin-bottom: 30px;
+  }
+
+  .bench {
+    display: grid;
+    gap: 8px;
+  }
+
+  .bench-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.015);
+  }
+
+  .bench-op {
+    font-size: 15.5px;
+    color: var(--ink);
+  }
+
+  .pill {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    padding: 5px 11px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .pill-win {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+    color: var(--accent-bright);
+  }
+
+  .pill-lose {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: var(--line-strong);
+    color: var(--muted);
+  }
+
+  .pill-neutral {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--muted-soft);
+  }
+
+  /* ---------- code ---------- */
+  .code-shell {
+    margin-top: 28px;
+    border: 1px solid var(--line);
+    background: #060606;
+  }
+
+  .code-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .code-bar span {
+    width: 11px;
+    height: 11px;
+    background: var(--line-strong);
+  }
+
+  .code-bar em {
+    margin-left: 8px;
+    font-style: normal;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: var(--muted-soft);
+  }
+
+  .code-body {
+    margin: 0;
+    background: transparent;
+    padding: 22px;
+    font-size: 14px;
+  }
+
+  @media (max-width: 860px) {
+    .hero-grid,
+    .features,
+    .stat-grid,
+    .split {
+      grid-template-columns: 1fr;
+    }
+
+    .feature + .feature {
+      border-left: none;
+    }
+
+    .stat + .stat {
+      padding-left: 0;
+      border-left: none;
+      border-top: 1px solid var(--line);
+    }
+
+    .bench-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .layout-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+  }
+</style>

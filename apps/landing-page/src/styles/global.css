@@ -334,6 +334,167 @@ code {
   white-space: nowrap;
 }
 
+.doc-page {
+  --accent: #b6f23d;
+  --accent-bright: #cdff63;
+  --accent-soft: rgba(182, 242, 61, 0.13);
+  --accent-line: rgba(182, 242, 61, 0.4);
+  position: relative;
+  font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.doc-wrap {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.doc-hero {
+  border-bottom: 1px solid var(--line);
+  padding: clamp(46px, 7vw, 84px) 0 clamp(36px, 5vw, 64px);
+}
+
+.doc-kicker {
+  margin: 0 0 20px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--accent-bright);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.doc-title {
+  max-width: 980px;
+  font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(44px, 7vw, 82px);
+  font-weight: 600;
+  line-height: 0.96;
+  letter-spacing: -0.03em;
+}
+
+.doc-lead {
+  max-width: 760px;
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: clamp(17px, 1.7vw, 21px);
+  line-height: 1.55;
+}
+
+.doc-block {
+  border-bottom: 1px solid var(--line);
+  padding: clamp(48px, 7vw, 86px) 0;
+}
+
+.doc-split {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(28px, 6vw, 72px);
+  align-items: start;
+}
+
+.doc-section-title {
+  max-width: 760px;
+  font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(30px, 4.8vw, 56px);
+  font-weight: 600;
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+}
+
+.doc-copy {
+  max-width: 62ch;
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.doc-code {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: #060606;
+  color: var(--code-ink);
+  padding: 22px;
+}
+
+.doc-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.doc-card {
+  display: grid;
+  gap: 14px;
+  min-height: 210px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.015);
+  padding: 22px;
+  text-decoration: none;
+}
+
+.doc-card:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.doc-card span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--accent-bright);
+  font-size: 13px;
+}
+
+.doc-card h2,
+.doc-panel h2 {
+  font-family: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.doc-card p,
+.doc-panel p {
+  color: var(--muted);
+}
+
+.doc-panel {
+  min-height: 100%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.015);
+  padding: 24px;
+}
+
+.doc-list {
+  margin: 18px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.doc-list li + li {
+  margin-top: 8px;
+}
+
+.doc-table {
+  display: grid;
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.doc-table div {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.38fr) minmax(0, 1fr);
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
+}
+
+.doc-table strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--accent-bright);
+  font-size: 14px;
+}
+
+.doc-table span {
+  color: var(--muted);
+}
+
 @media (max-width: 820px) {
   .site-header,
   .site-footer {
@@ -349,7 +510,10 @@ code {
 
   .hero,
   .grid,
-  .doc-grid {
+  .doc-grid,
+  .doc-split,
+  .doc-card-grid,
+  .doc-table div {
     grid-template-columns: 1fr;
   }
 }

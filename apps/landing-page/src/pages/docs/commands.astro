@@ -3,29 +3,39 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 ---
 
 <BaseLayout title="sixpack CLI Commands" description="Current sixpack CLI command surface.">
-  <section class="section">
-    <div class="container prose">
-      <p class="eyebrow">CLI</p>
-      <h1>Small command surface.</h1>
-      <p>
-        The CLI is intentionally small while the runtime API and storage engine
-        settle.
-      </p>
+  <article class="doc-page">
+    <section class="doc-hero">
+      <div class="doc-wrap">
+        <p class="doc-kicker">/ cli</p>
+        <h1 class="doc-title">A small binary surface while the engine settles.</h1>
+        <p class="doc-lead">
+          The current command line stays intentionally narrow. The runtime API
+          and storage engine are the primary implementation focus, so the binary
+          only exposes stable behavior that actually exists.
+        </p>
+      </div>
+    </section>
 
-      <h2>Implemented</h2>
-      <ul>
-        <li>`sixpack --version` or `sixpack -V` prints the CLI version.</li>
-        <li>`sixpack help`, `-h`, or `--help` prints usage.</li>
-      </ul>
-
-      <h2>Planned</h2>
-      <ul>
-        <li>initialize a database directory</li>
-        <li>inspect schema and storage status</li>
-        <li>rebuild generated indexes</li>
-        <li>repair or truncate incomplete final writes</li>
-        <li>run focused benchmarks or diagnostics</li>
-      </ul>
-    </div>
-  </section>
+    <section class="doc-block">
+      <div class="doc-wrap doc-split">
+        <div class="doc-panel">
+          <h2>Implemented</h2>
+          <ul class="doc-list">
+            <li><code>sixpack --version</code> or <code>sixpack -V</code> prints the CLI version.</li>
+            <li><code>sixpack help</code>, <code>-h</code>, or <code>--help</code> prints usage.</li>
+          </ul>
+        </div>
+        <div class="doc-panel">
+          <h2>Planned</h2>
+          <ul class="doc-list">
+            <li>initialize a database directory</li>
+            <li>inspect schema and storage status</li>
+            <li>rebuild generated indexes</li>
+            <li>repair or truncate incomplete final writes</li>
+            <li>run focused benchmarks or diagnostics</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </article>
 </BaseLayout>
