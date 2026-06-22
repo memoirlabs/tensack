@@ -1,0 +1,9 @@
+[package]
+name = "sixpack-schema-compiler"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/sixpack/sixpack"
+
+[dependencies]
+sixpack-core.workspace = true

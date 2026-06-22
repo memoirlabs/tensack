@@ -77,7 +77,7 @@ lookup conversation_id
 Current crate:
 
 ```txt
-packages/tensack-schema-compiler
+packages/sixpack-schema-compiler
 ```
 
 Current important functions:

@@ -1,0 +1,48 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="sixpack Architecture" description="Current sixpack architecture.">
+  <section class="section">
+    <div class="container prose">
+      <p class="eyebrow">Architecture</p>
+      <h1>Readable source data, binary hot state.</h1>
+      <p>
+        sixpack is currently a small local table database. It keeps canonical
+        data in append-only `.6` row segments and treats generated indexes as
+        rebuildable acceleration.
+      </p>
+
+      <h2>Storage flow</h2>
+      <pre><code>validate change
+append .6
+update runtime .6b projection
+recover metadata/cache from .6 when needed</code></pre>
+
+      <h2>Runtime projection</h2>
+      <p>
+        The hot projection is map-backed in memory. This keeps normal reads and
+        edits off full-table traversal paths.
+      </p>
+      <pre><code>rows_by_id        row id -> .6 row pointer
+lookup_ids        lookup field + key -> row ids
+row_lookup_keys   row id -> lookup keys currently attached to that row</code></pre>
+
+      <h2>Edit path</h2>
+      <p>
+        A patch resolves the row, appends the replacement operation, removes
+        only that row's old lookup keys, inserts the new lookup keys, and
+        updates the row pointer. The compact `.6b` file can be materialized
+        from the runtime map when the engine needs a durable cache boundary.
+      </p>
+
+      <h2>Current limits</h2>
+      <ul>
+        <li>`db.watch(...)` live subscriptions are planned.</li>
+        <li>`.6x` full-text search is reserved but not implemented.</li>
+        <li>Compaction and segment sealing are not implemented yet.</li>
+        <li>SQLite remains much faster for large transactional update batches.</li>
+      </ul>
+    </div>
+  </section>
+</BaseLayout>

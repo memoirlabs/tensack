@@ -1,0 +1,55 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const nav = [
+  { href: "/alt", label: "Alt Home" },
+  { href: "/", label: "Overview" },
+  { href: "/docs", label: "Docs" },
+  { href: "/docs/architecture", label: "Architecture" },
+  { href: "/docs/file-format", label: "Format" },
+  { href: "/docs/commands", label: "CLI" },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,120,850&family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@1,18,500&display=swap"
+      rel="stylesheet"
+    />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="site-header-shell">
+      <div class="site-header">
+        <a class="brand" href="/" aria-label="sixpack home">
+          <span>sixpack</span>
+        </a>
+        <nav aria-label="Primary">
+          {nav.map((item) => <a href={item.href}>{item.label}</a>)}
+        </nav>
+      </div>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="site-footer-shell">
+      <div class="site-footer">
+        <span>Local-first table storage for typed Rust applications.</span>
+        <a href="https://github.com/sixpack/sixpack">GitHub</a>
+      </div>
+    </footer>
+  </body>
+</html>

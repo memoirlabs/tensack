@@ -1,13 +1,13 @@
 [workspace]
 members = [
-  "apps/tensack",
-  "packages/tensack",
-  "packages/tensack-core",
-  "packages/tensack-format",
-  "packages/tensack-store",
-  "packages/tensack-cli",
-  "packages/tensack-testkit",
-  "packages/tensack-schema-compiler",
+  "apps/sixpack",
+  "packages/sixpack",
+  "packages/sixpack-core",
+  "packages/sixpack-format",
+  "packages/sixpack-store",
+  "packages/sixpack-cli",
+  "packages/sixpack-testkit",
+  "packages/sixpack-schema-compiler",
   "apps/test-lab/note-taking-init",
   "benchmark",
 ]
@@ -17,15 +17,25 @@ resolver = "2"
 version = "0.0.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/tensack/tensack"
+repository = "https://github.com/sixpack/sixpack"
 
 [workspace.dependencies]
-tensack = { path = "packages/tensack" }
-tensack-core = { path = "packages/tensack-core" }
-tensack-format = { path = "packages/tensack-format" }
-tensack-store = { path = "packages/tensack-store" }
-tensack-cli = { path = "packages/tensack-cli" }
-tensack-testkit = { path = "packages/tensack-testkit" }
-tensack-schema-compiler = { path = "packages/tensack-schema-compiler" }
+sixpack = { path = "packages/sixpack" }
+sixpack-core = { path = "packages/sixpack-core" }
+sixpack-format = { path = "packages/sixpack-format" }
+sixpack-store = { path = "packages/sixpack-store" }
+sixpack-cli = { path = "packages/sixpack-cli" }
+sixpack-testkit = { path = "packages/sixpack-testkit" }
+sixpack-schema-compiler = { path = "packages/sixpack-schema-compiler" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

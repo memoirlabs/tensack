@@ -1,13 +1,13 @@
 # Database Testing
 
-This repository is for Tensack, a local-first database project. The current root
+This repository is for sixpack, a local-first database project. The current root
 workspace is a v0 Rust scaffold. The runtime is not fully implemented in the root
 crates yet, but the repo direction is clear:
 
-- Tensack data is local data.
+- sixpack data is local data.
 - A database instance is a directory on disk.
 - Durable data should be human-inspectable enough for local debugging.
-- Readable `.ten` table data is the source of truth in the target backend direction.
+- Readable `.6` table data is the source of truth in the target backend direction.
 - Lookup files are rebuildable sidecars, not the logical data model.
 - Tests must be able to create and destroy database instances without touching
   real user data.
@@ -19,23 +19,23 @@ temporary directory.
 
 The root workspace currently contains:
 
-- `packages/tensack-core` - core data model boundaries.
-- `packages/tensack-format` - file format boundary and version/header shell.
-- `packages/tensack-store` - local storage boundary with a `LocalStore` handle.
-- `apps/tensack` - CLI shell with `help`, `--version`, and a future command set.
+- `packages/sixpack-core` - core data model boundaries.
+- `packages/sixpack-format` - file format boundary and version/header shell.
+- `packages/sixpack-store` - local storage boundary with a `LocalStore` handle.
+- `apps/sixpack` - CLI shell with `help`, `--version`, and a future command set.
 - `tests/contracts` - intended home for public behavior contract tests.
 - `tests/snapshots` - intended home for reviewed stable output snapshots.
 
 The current storage path opens a database at a caller-provided path, creates
-directories such as `tables/` and `engine/`, writes `tensack.toml`, appends table
-rows to `.ten` files, and writes rebuildable `.tenb` lookup/index caches.
+directories such as `tables/` and `engine/`, writes `sixpack.toml`, appends table
+rows to `.6` files, and writes rebuildable `.6b` lookup/index caches.
 
 ## Mental Model
 
-For Tensack, the database boundary should be:
+For sixpack, the database boundary should be:
 
 ```txt
-A Tensack database instance = one directory.
+A sixpack database instance = one directory.
 A test database = one temporary directory.
 Resetting the database = deleting that directory.
 ```
@@ -47,11 +47,11 @@ at an external database service:
 app -> Postgres/Supabase/SQLite/Neon/etc.
 ```
 
-Tensack is the database product. The important behavior is the storage engine
+sixpack is the database product. The important behavior is the storage engine
 itself:
 
 ```txt
-Tensack API -> local directory -> tensack.toml/tables/engine
+sixpack API -> local directory -> sixpack.toml/tables/engine
 ```
 
 So tests need to check filesystem-backed behavior directly.
@@ -60,7 +60,7 @@ So tests need to check filesystem-backed behavior directly.
 
 Tests must not open real project data paths such as:
 
-- `.tensack`
+- `.sixpack`
 - `./data`
 - a user-provided persistent workspace path
 
@@ -114,7 +114,7 @@ This should be the main database testing environment.
 Each test gets a fresh root:
 
 ```txt
-/tmp/tensack-test-random-id/
+/tmp/sixpack-test-random-id/
 ```
 
 Then the test can do real database work:
@@ -165,13 +165,13 @@ Snapshots should be updated intentionally and reviewed as part of a change.
 Avoid shared mutable test databases. They make tests order-dependent and create
 cleanup problems.
 
-Avoid tests that write to `.tensack` in the repository root. That path is for
+Avoid tests that write to `.sixpack` in the repository root. That path is for
 real local workspace state, not disposable test state.
 
 Avoid assuming lookup files are the source of truth. The current architecture
 direction treats lookup files as rebuildable acceleration.
 
-Avoid adding an external database server just to test Tensack. That would test a
+Avoid adding an external database server just to test sixpack. That would test a
 different product shape than the one described by this repo.
 
 Avoid hand-modeled SDK behavior that drifts from the schema/codegen direction.
@@ -202,7 +202,7 @@ Tests would then use:
 
 ```rust
 let test_db = TestDb::new();
-// Open Tensack at `&test_db.root`.
+// Open sixpack at `&test_db.root`.
 ```
 
 The `_dir` field intentionally keeps the temporary directory alive until the

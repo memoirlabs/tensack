@@ -1,7 +1,7 @@
 # Schema Compiler (Rust)
 
-`packages/tensack-schema-compiler` is the build-time schema compiler crate.
-The current schema direction is summarized in [TENSACK_SCHEMA_SPEC.md](TENSACK_SCHEMA_SPEC.md).
+`packages/sixpack-schema-compiler` is the build-time schema compiler crate.
+The current schema direction is summarized in [sixpack_schema_spec.md](sixpack_schema_spec.md).
 
 It currently does three things:
 
@@ -72,7 +72,7 @@ schema! {
 The intended build path is:
 
 ```txt
-schema.tensack
+schema.sixpack
   -> compile_schema(source)
   -> validated SchemaIr
   -> emit_raw_rust(ir)
@@ -93,7 +93,7 @@ bool  -> bool
 ```
 
 ```rust
-use tensack_generated_schema::TensackGeneratedTables;
+use sixpack_generated_schema::GeneratedTables;
 
 db.messages().insert(row)?;
 db.messages().get().id("m1")?;
@@ -105,7 +105,7 @@ db.messages().count()?;
 Run the working example with:
 
 ```sh
-cargo run -p tensack-schema-compiler --example compile_schema
+cargo run -p sixpack-schema-compiler --example compile_schema
 ```
 
 That example compiles a multi-table schema, prints the IR summary, and prints

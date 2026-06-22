@@ -374,8 +374,8 @@ checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 name = "note-taking-init"
 version = "0.0.0"
 dependencies = [
- "tensack",
- "tensack-schema-compiler",
+ "sixpack",
+ "sixpack-schema-compiler",
 ]
 
 [[package]]
@@ -604,6 +604,71 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "sixpack"
+version = "0.0.0"
+dependencies = [
+ "sixpack-core",
+ "sixpack-format",
+ "sixpack-store",
+]
+
+[[package]]
+name = "sixpack-app"
+version = "0.0.0"
+dependencies = [
+ "sixpack-cli",
+]
+
+[[package]]
+name = "sixpack-benchmark"
+version = "0.0.0"
+dependencies = [
+ "criterion",
+ "rusqlite",
+ "sixpack",
+ "tempfile",
+]
+
+[[package]]
+name = "sixpack-cli"
+version = "0.0.0"
+
+[[package]]
+name = "sixpack-core"
+version = "0.0.0"
+
+[[package]]
+name = "sixpack-format"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sixpack-core",
+]
+
+[[package]]
+name = "sixpack-schema-compiler"
+version = "0.0.0"
+dependencies = [
+ "sixpack-core",
+]
+
+[[package]]
+name = "sixpack-store"
+version = "0.0.0"
+dependencies = [
+ "sixpack-core",
+ "sixpack-format",
+]
+
+[[package]]
+name = "sixpack-testkit"
+version = "0.0.0"
+dependencies = [
+ "sixpack",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -637,71 +702,6 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys",
-]
-
-[[package]]
-name = "tensack"
-version = "0.0.0"
-dependencies = [
- "tensack-core",
- "tensack-format",
- "tensack-store",
-]
-
-[[package]]
-name = "tensack-app"
-version = "0.0.0"
-dependencies = [
- "tensack-cli",
-]
-
-[[package]]
-name = "tensack-benchmark"
-version = "0.0.0"
-dependencies = [
- "criterion",
- "rusqlite",
- "tempfile",
- "tensack",
-]
-
-[[package]]
-name = "tensack-cli"
-version = "0.0.0"
-
-[[package]]
-name = "tensack-core"
-version = "0.0.0"
-
-[[package]]
-name = "tensack-format"
-version = "0.0.0"
-dependencies = [
- "serde",
- "serde_json",
- "tensack-core",
-]
-
-[[package]]
-name = "tensack-schema-compiler"
-version = "0.0.0"
-dependencies = [
- "tensack-core",
-]
-
-[[package]]
-name = "tensack-store"
-version = "0.0.0"
-dependencies = [
- "tensack-core",
- "tensack-format",
-]
-
-[[package]]
-name = "tensack-testkit"
-version = "0.0.0"
-dependencies = [
- "tensack",
 ]
 
 [[package]]

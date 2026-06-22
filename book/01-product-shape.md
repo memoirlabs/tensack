@@ -1,6 +1,6 @@
 # Product Shape
 
-Tensack is a local-first state layer for small apps and tools.
+sixpack is a local-first state layer for small apps and tools.
 
 The unit of data is a database directory. The unit of logic is a schema. The
 normal user-facing API should be tiny and declarative:
@@ -14,7 +14,7 @@ db.write(change)
 ## Mental Model
 
 ```txt
-schema.tensack
+schema.sixpack
   -> schema compiler
   -> generated selectors and changes
   -> user calls db.get(...) or db.write(...)

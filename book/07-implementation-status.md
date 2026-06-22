@@ -17,25 +17,25 @@ This chapter is the honesty check.
 
 ### Format
 
-- `.ten` preambles
-- `.ten` operation rows
+- `.6` preambles
+- `.6` operation rows
 - put rows
 - delete tombstones
-- binary `.tenb` v2 cache encoding/decoding
-- legacy text `.tenb` decode for rebuild migration
+- binary `.6b` v2 cache encoding/decoding
+- legacy text `.6b` decode for rebuild migration
 
 ### Store
 
 - local database directory layout
 - reverse-sorted chunk naming
-- append into reusable `.ten` segments
+- append into reusable `.6` segments
 - append full replacement
 - same-table write batches
 - delete tombstones
 - compact recoverable metadata counters
-- lazy disk `.tenb` persistence with source-hash rebuild checks
-- `next_tx` recovery from canonical `.ten` operation rows
-- `.tenb` rebuilds
+- lazy disk `.6b` persistence with source-hash rebuild checks
+- `next_tx` recovery from canonical `.6` operation rows
+- `.6b` rebuilds
 - id lookup
 - declared lookup reads
 - live table scans
@@ -44,7 +44,7 @@ This chapter is the honesty check.
 
 ### Runtime
 
-- `TensackDatabase`
+- `Database`
 - `db.get(selector)` for current state once
 - `db.write(change)` for declared state changes
 - `db.write_many(changes)` for same-table batched changes
@@ -75,5 +75,5 @@ This chapter is the honesty check.
 - plan JSON serde
 - repair/inspect CLI
 - compaction
-- `.tenx`
+- `.6x`
 - durable cursor format

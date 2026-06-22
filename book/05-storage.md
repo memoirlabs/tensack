@@ -1,19 +1,19 @@
 # Storage
 
-Tensack storage is local and directory-backed.
+sixpack storage is local and directory-backed.
 
 The source of truth is:
 
 ```txt
-schema.tensack + tables/**/*.ten
+schema.sixpack + tables/**/*.6
 ```
 
 Generated state:
 
 ```txt
-tensack.toml
-engine/*.tenb
-engine/*.tenx
+sixpack.toml
+engine/*.6b
+engine/*.6x
 ```
 
 Generated state must be rebuildable.
@@ -21,18 +21,18 @@ Generated state must be rebuildable.
 ## Directory Shape
 
 ```txt
-my-chat.tensack/
-  schema.tensack
-  tensack.toml
+my-chat.sixpack/
+  schema.sixpack
+  sixpack.toml
   tables/
     messages/
-      zzz.ten
-      zzy.ten
+      zzz.6
+      zzy.6
     users/
-      zzz.ten
+      zzz.6
   engine/
-    messages.tenb
-    users.tenb
+    messages.6b
+    users.6b
 ```
 
 ## Chunk Naming
@@ -40,7 +40,7 @@ my-chat.tensack/
 Chunk paths:
 
 ```txt
-<chunk>.ten
+<chunk>.6
 ```
 
 Rules:
@@ -53,10 +53,10 @@ chunk width      = 3
 Examples:
 
 ```txt
-counter 0      -> zzz.ten
-counter 1      -> zzy.ten
-counter 2      -> zzx.ten
-counter 46655  -> 000.ten
+counter 0      -> zzz.6
+counter 1      -> zzy.6
+counter 2      -> zzx.6
+counter 46655  -> 000.6
 ```
 
 The counter increases normally. The visible name counts backward so newer files
@@ -67,11 +67,11 @@ runtime. Do not add generation folders unless the product explicitly needs that
 extra scale later.
 
 The long original naming note is archived at
-[reference/tensack_chunk_naming_spec.md](reference/tensack_chunk_naming_spec.md).
+[reference/sixpack_chunk_naming_spec.md](reference/sixpack_chunk_naming_spec.md).
 
 ## Metadata
 
-`tensack.toml` is operational state, not a second schema.
+`sixpack.toml` is operational state, not a second schema.
 
 ```toml
 version = 1
@@ -86,7 +86,7 @@ header = "id\tbody"
 
 [tables.messages.index]
 state = "ready"
-file = "engine/messages.tenb"
+file = "engine/messages.6b"
 source_hash = "..."
 ```
 
@@ -95,7 +95,7 @@ source_hash = "..."
 Storage behavior belongs in:
 
 ```txt
-packages/tensack-store
+packages/sixpack-store
 ```
 
 The store owns:
@@ -103,19 +103,19 @@ The store owns:
 - directory creation
 - chunk paths
 - validated write batches
-- append-only `.ten` chunk writes
-- scans over `.ten`
-- `.tenb` rebuilds
+- append-only `.6` chunk writes
+- scans over `.6`
+- `.6b` rebuilds
 - row pointer reads
 - lookup/cache operations
 
 Normal writes keep metadata compact and recoverable. Chunk lists are derived by
 scanning the table directory when needed; they are not rewritten into
-`tensack.toml` on every append. Hot one-row writes may leave metadata counters
-behind the newest `.ten` data. Fresh handles recover `next_tx` from `.ten`
+`sixpack.toml` on every append. Hot one-row writes may leave metadata counters
+behind the newest `.6` data. Fresh handles recover `next_tx` from `.6`
 operation rows.
 
-Hot writes append to the current `.ten` segment until the store rolls to a new
-chunk. They may publish the generated `.tenb` projection in memory and leave the
-on-disk `.tenb` file stale; later database handles hash canonical `.ten` data
-lines to detect stale `.tenb` bytes and rebuild generated state.
+Hot writes append to the current `.6` segment until the store rolls to a new
+chunk. They may publish the generated `.6b` projection in memory and leave the
+on-disk `.6b` file stale; later database handles hash canonical `.6` data
+lines to detect stale `.6b` bytes and rebuild generated state.

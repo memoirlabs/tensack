@@ -13,7 +13,7 @@ db.write_many(changes)
 ```
 
 For a direct comparison between common SQLite statements and the generated
-Tensack shape, see [SQLite Mapping](13-sqlite-mapping.md).
+sixpack shape, see [SQLite Mapping](13-sqlite-mapping.md).
 
 ## Selectors
 
@@ -114,7 +114,7 @@ Applies same-table changes as one storage batch.
 
 - All changes must target the same table.
 - Validation happens before disk writes.
-- The store appends the batch into the current `.ten` segment.
+- The store appends the batch into the current `.6` segment.
 - This is implemented in the runtime as the fast path for grouped writes.
 
 ## What Not To Do

@@ -1,0 +1,48 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="sixpack File Format" description="Current sixpack file layout.">
+  <section class="section">
+    <div class="container prose">
+      <p class="eyebrow">File format</p>
+      <h1>One source of truth.</h1>
+      <p>
+        The current local store treats schema and `.6` data as truth. Metadata
+        and generated caches are operational state.
+      </p>
+
+      <pre><code>schema.sixpack  logical schema truth
+tables/*.6    canonical append-only row operations
+engine/*.6b   generated binary row pointers and lookup indexes
+engine/*.6x   optional generated full-text index, planned
+sixpack.toml    compact recoverable engine metadata</code></pre>
+
+      <h2>Readable row files</h2>
+      <p>
+        `.6` files are readable table row segments. `R` appends a full
+        replacement row. `D` appends a delete tombstone by id.
+      </p>
+      <pre><code>SIX&lt;TAB&gt;1&lt;TAB&gt;table&lt;TAB&gt;messages&lt;TAB&gt;&lt;schema_hash&gt;
+@field&lt;TAB&gt;id&lt;TAB&gt;id
+@field&lt;TAB&gt;body&lt;TAB&gt;text
+@lookup&lt;TAB&gt;id&lt;TAB&gt;unique
+@data
+R&lt;TAB&gt;1&lt;TAB&gt;m1&lt;TAB&gt;hello
+D&lt;TAB&gt;2&lt;TAB&gt;m1</code></pre>
+
+      <h2>Generated cache</h2>
+      <p>
+        `.6b` is a generated binary cache for row pointers and lookup indexes.
+        It is rebuilt when missing, stale, corrupt, or built for a different
+        schema/source hash.
+      </p>
+
+      <h2>Search index</h2>
+      <p>
+        `.6x` is reserved for optional full-text search. Missing `.6x` files
+        do not affect normal reads.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

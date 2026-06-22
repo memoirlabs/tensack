@@ -2,9 +2,9 @@
 /target/
 **/target/
 
-# Local Tensack runtime data
-/.tensack/
-**/.tensack/
+# Local Sixpack runtime data
+/.sixpack/
+**/.sixpack/
 
 # Logs and temporary files
 *.log

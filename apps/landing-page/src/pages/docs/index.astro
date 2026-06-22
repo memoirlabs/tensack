@@ -1,0 +1,44 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const docs = [
+  {
+    href: "/docs/architecture",
+    title: "Architecture",
+    body: "The current runtime shape: readable append data, runtime maps, and generated binary cache snapshots.",
+  },
+  {
+    href: "/docs/file-format",
+    title: "File format",
+    body: "The current `.6`, `.6b`, `.6x`, and `sixpack.toml` layout.",
+  },
+  {
+    href: "/docs/commands",
+    title: "CLI commands",
+    body: "The intentionally small command surface implemented today.",
+  },
+];
+---
+
+<BaseLayout title="sixpack Docs" description="Current sixpack documentation.">
+  <section class="section">
+    <div class="container prose">
+      <p class="eyebrow">Docs</p>
+      <h1>Current behavior only.</h1>
+      <p class="lead">
+        These pages describe what the repository implements today. Planned
+        features are called out separately when needed.
+      </p>
+    </div>
+  </section>
+  <section class="section">
+    <div class="container doc-grid">
+      {docs.map((doc) => (
+        <a class="card" href={doc.href}>
+          <h3>{doc.title}</h3>
+          <p>{doc.body}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+</BaseLayout>

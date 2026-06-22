@@ -1,5 +1,11 @@
-# Tensack Landing Page
+# sixpack Site
 
-Static documentation app for the current Tensack backend shape.
+Minimal Astro landing page and docs shell for the public sixpack project.
 
-Open `index.html` directly in a browser. There is no build step yet.
+```sh
+bun install
+bun run dev
+```
+
+The site intentionally mirrors current repository behavior. Avoid describing
+planned features as implemented.

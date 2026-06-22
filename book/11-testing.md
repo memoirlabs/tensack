@@ -1,6 +1,6 @@
 # Testing
 
-Tensack is the database product, so tests must exercise local directory-backed
+sixpack is the database product, so tests must exercise local directory-backed
 behavior directly.
 
 ## Core Rule
@@ -10,7 +10,7 @@ Use temporary directories for data-bearing tests.
 Never write disposable test data to:
 
 ```txt
-.tensack
+.sixpack
 .data
 repo root paths
 real user workspace paths
@@ -19,7 +19,7 @@ real user workspace paths
 ## Mental Model
 
 ```txt
-A Tensack database instance = one directory.
+A sixpack database instance = one directory.
 A test database = one temporary directory.
 Resetting the database = deleting that directory.
 ```

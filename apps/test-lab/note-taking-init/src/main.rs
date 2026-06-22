@@ -1,16 +1,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use tensack::TensackDatabase;
-use tensack_schema_compiler::{compile_schema, database_schema_from_ir, emit_raw_rust};
+use sixpack::Database;
+use sixpack_schema_compiler::{compile_schema, database_schema_from_ir, emit_raw_rust};
 
-include!(concat!(env!("OUT_DIR"), "/tensack_generated_schema.rs"));
+include!(concat!(env!("OUT_DIR"), "/sixpack_generated_schema.rs"));
 
-use tensack_generated_schema as sdk;
+use sixpack_generated_schema as sdk;
 
-const SCHEMA_V1_SOURCE: &str = include_str!("../schema.v1.tensack");
-const SCHEMA_V2_SOURCE: &str = include_str!("../schema.v2.tensack");
-const SCHEMA_V3_SOURCE: &str = include_str!("../schema.tensack");
+const SCHEMA_V1_SOURCE: &str = include_str!("../schema.v1.sixpack");
+const SCHEMA_V2_SOURCE: &str = include_str!("../schema.v2.sixpack");
+const SCHEMA_V3_SOURCE: &str = include_str!("../schema.sixpack");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output_root = output_root();
@@ -67,7 +67,7 @@ fn init_note_database(
     output_root: &Path,
     schema_source: &str,
     generated_file_name: &str,
-) -> Result<TensackDatabase, Box<dyn std::error::Error>> {
+) -> Result<Database, Box<dyn std::error::Error>> {
     fs::create_dir_all(output_root)?;
 
     let ir = compile_schema(schema_source)?;
@@ -81,7 +81,7 @@ fn init_note_database(
     fs::write(artifacts_dir.join(generated_file_name), &generated)?;
     fs::write(generated_dir.join("schema.rs"), generated)?;
 
-    let db = TensackDatabase::open_local_with_schema(output_root, "notes-db", schema);
+    let db = Database::open_local_with_schema(output_root, "notes-db", schema);
     db.init()?;
     Ok(db)
 }
@@ -97,7 +97,7 @@ fn print_current_view(output_root: &Path) {
     );
 }
 
-fn write_note_rows(db: &TensackDatabase) -> Result<(), Box<dyn std::error::Error>> {
+fn write_note_rows(db: &Database) -> Result<(), Box<dyn std::error::Error>> {
     if db.get(sdk::notebooks::by::id("notebook-1"))?.is_none() {
         db.write(sdk::notebooks::add(sdk::notebooks::Row {
             id: "notebook-1".to_owned(),
@@ -120,7 +120,7 @@ fn write_note_rows(db: &TensackDatabase) -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
-fn write_tag_rows(db: &TensackDatabase) -> Result<(), Box<dyn std::error::Error>> {
+fn write_tag_rows(db: &Database) -> Result<(), Box<dyn std::error::Error>> {
     if db.get(sdk::tags::by::id("tag-1"))?.is_none() {
         db.write(sdk::tags::add(sdk::tags::Row {
             id: "tag-1".to_owned(),
@@ -191,10 +191,10 @@ mod tests {
         assert!(root.join("generated/schema.rs").exists());
         assert!(root.join("generated/artifacts/schema-v1.rs").exists());
         assert!(!root.join("generated/schema-v1.rs").exists());
-        assert!(db.join("tensack.toml").exists());
-        assert!(db.join("engine/notebooks.tenb").exists());
+        assert!(db.join("sixpack.toml").exists());
+        assert!(db.join("engine/notebooks.6b").exists());
         assert!(db.join("tables/notebooks").exists());
-        assert!(!db.join("engine/notes.tenb").exists());
+        assert!(!db.join("engine/notes.6b").exists());
         assert!(!db.join("tables/notes").exists());
 
         let generated = fs::read_to_string(root.join("generated/schema.rs")).unwrap();
@@ -206,17 +206,17 @@ mod tests {
         write_note_rows(&db_v2).unwrap();
 
         assert!(root.join("generated/artifacts/schema-v2.rs").exists());
-        assert!(db.join("engine/notebooks.tenb").exists());
-        assert!(db.join("engine/notes.tenb").exists());
-        assert!(db.join("tables/notebooks/zzz.ten").exists());
-        assert!(db.join("tables/notes/zzz.ten").exists());
+        assert!(db.join("engine/notebooks.6b").exists());
+        assert!(db.join("engine/notes.6b").exists());
+        assert!(db.join("tables/notebooks/zzz.6").exists());
+        assert!(db.join("tables/notes/zzz.6").exists());
 
         let generated = fs::read_to_string(root.join("generated/schema.rs")).unwrap();
         assert!(generated.contains("pub mod notebooks"));
         assert!(generated.contains("pub mod notes"));
 
-        let notes = fs::read_to_string(db.join("tables/notes/zzz.ten")).unwrap();
-        assert!(notes.contains("TEN\t1\ttable\tnotes\t"));
+        let notes = fs::read_to_string(db.join("tables/notes/zzz.6")).unwrap();
+        assert!(notes.contains("SIX\t1\ttable\tnotes\t"));
         assert!(notes.contains("@field\tnotebook_id\tid\n"));
         assert!(notes.contains("@lookup\tnotebook_id\tmany\n"));
         assert!(notes.contains("@data\n"));
@@ -228,21 +228,21 @@ mod tests {
         assert_eq!(note_rows.len(), 1);
         assert_eq!(note_rows[0].title, "First note");
 
-        let notes_cache = fs::read(db.join("engine/notes.tenb")).unwrap();
-        assert!(notes_cache.starts_with(b"TENB\0"));
+        let notes_cache = fs::read(db.join("engine/notes.6b")).unwrap();
+        assert!(notes_cache.starts_with(b"SIXB\0"));
 
-        let metadata = fs::read_to_string(db.join("tensack.toml")).unwrap();
+        let metadata = fs::read_to_string(db.join("sixpack.toml")).unwrap();
         assert!(metadata.contains("[tables.notebooks]"));
         assert!(metadata.contains("[tables.notes]"));
-        assert!(metadata.contains("file = \"engine/notebooks.tenb\""));
-        assert!(metadata.contains("file = \"engine/notes.tenb\""));
+        assert!(metadata.contains("file = \"engine/notebooks.6b\""));
+        assert!(metadata.contains("file = \"engine/notes.6b\""));
 
         let db_v3 = init_note_database(&root, SCHEMA_V3_SOURCE, "schema-v3.rs").unwrap();
         write_tag_rows(&db_v3).unwrap();
 
         assert!(root.join("generated/artifacts/schema-v3.rs").exists());
-        assert!(db.join("engine/tags.tenb").exists());
-        assert!(db.join("tables/tags/zzz.ten").exists());
+        assert!(db.join("engine/tags.6b").exists());
+        assert!(db.join("tables/tags/zzz.6").exists());
 
         let generated = fs::read_to_string(root.join("generated/schema.rs")).unwrap();
         assert!(generated.contains("pub mod tags"));
@@ -275,8 +275,8 @@ mod tests {
                 .is_empty()
         );
 
-        let tags_cache = fs::read(db.join("engine/tags.tenb")).unwrap();
-        assert!(tags_cache.starts_with(b"TENB\0"));
+        let tags_cache = fs::read(db.join("engine/tags.6b")).unwrap();
+        assert!(tags_cache.starts_with(b"SIXB\0"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -287,7 +287,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        path.push(format!("tensack-note-init-{stamp}"));
+        path.push(format!("sixpack-note-init-{stamp}"));
         path
     }
 }

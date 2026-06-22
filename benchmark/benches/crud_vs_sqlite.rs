@@ -4,10 +4,10 @@ use criterion::{
     BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
 };
 use rusqlite::{Connection, params};
-use tempfile::TempDir;
-use tensack::{
-    DatabaseSchema, PrimitiveType, Record, TableSchema, TensackDatabase, Value, change, selector,
+use sixpack::{
+    Database, DatabaseSchema, PrimitiveType, Record, TableSchema, Value, change, selector,
 };
+use tempfile::TempDir;
 
 const ROW_COUNTS: &[usize] = &[25, 100];
 const TABLE: &str = "users";
@@ -36,15 +36,15 @@ fn user_record(index: usize) -> Record {
         .unwrap()
 }
 
-fn open_tensack() -> (TempDir, TensackDatabase) {
+fn open_sixpack() -> (TempDir, Database) {
     let dir = tempfile::tempdir().unwrap();
-    let db = TensackDatabase::open_local_with_schema(dir.path(), "bench", user_schema());
+    let db = Database::open_local_with_schema(dir.path(), "bench", user_schema());
     db.init().unwrap();
     (dir, db)
 }
 
-fn populated_tensack(rows: usize) -> (TempDir, TensackDatabase) {
-    let (dir, db) = open_tensack();
+fn populated_sixpack(rows: usize) -> (TempDir, Database) {
+    let (dir, db) = open_sixpack();
     for index in 0..rows {
         db.write(change::add(user_record(index))).unwrap();
     }
@@ -133,11 +133,11 @@ fn bench_create(c: &mut Criterion) {
         group.throughput(Throughput::Elements(rows as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_write_add", rows),
+            BenchmarkId::new("sixpack_write_add", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
-                    open_tensack,
+                    open_sixpack,
                     |(_dir, db)| {
                         for index in 0..rows {
                             db.write(change::add(user_record(index))).unwrap();
@@ -165,11 +165,11 @@ fn bench_create(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_insert_many", rows),
+            BenchmarkId::new("sixpack_insert_many", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
-                    open_tensack,
+                    open_sixpack,
                     |(_dir, db)| {
                         let records: Vec<_> = (0..rows).map(user_record).collect();
                         db.insert_many(&records).unwrap();
@@ -203,9 +203,9 @@ fn bench_read(c: &mut Criterion) {
     for &rows in ROW_COUNTS {
         group.throughput(Throughput::Elements(rows as u64));
 
-        group.bench_with_input(BenchmarkId::new("tensack_get", rows), &rows, |b, &rows| {
+        group.bench_with_input(BenchmarkId::new("sixpack_get", rows), &rows, |b, &rows| {
             b.iter_batched(
-                || populated_tensack(rows),
+                || populated_sixpack(rows),
                 |(_dir, db)| {
                     for index in 0..rows {
                         let row = db.get(selector::id(TABLE, format!("u{index}"))).unwrap();
@@ -256,11 +256,11 @@ fn bench_count(c: &mut Criterion) {
         group.throughput(Throughput::Elements(rows as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_count", rows),
+            BenchmarkId::new("sixpack_count", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
-                    || populated_tensack(rows),
+                    || populated_sixpack(rows),
                     |(_dir, db)| {
                         let count = db.count(TABLE).unwrap();
                         black_box(count);
@@ -294,11 +294,11 @@ fn bench_update(c: &mut Criterion) {
         group.throughput(Throughput::Elements(rows as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_write_edit", rows),
+            BenchmarkId::new("sixpack_write_edit", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
-                    || populated_tensack(rows),
+                    || populated_sixpack(rows),
                     |(_dir, db)| {
                         for index in 0..rows {
                             db.write(change::edit_id(
@@ -318,11 +318,11 @@ fn bench_update(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_write_many_edit", rows),
+            BenchmarkId::new("sixpack_write_many_edit", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
-                    || populated_tensack(rows),
+                    || populated_sixpack(rows),
                     |(_dir, db)| {
                         let changes = (0..rows)
                             .map(|index| {
@@ -381,11 +381,11 @@ fn bench_delete(c: &mut Criterion) {
         group.throughput(Throughput::Elements(rows as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_write_remove", rows),
+            BenchmarkId::new("sixpack_write_remove", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
-                    || populated_tensack(rows),
+                    || populated_sixpack(rows),
                     |(_dir, db)| {
                         for index in 0..rows {
                             db.write(change::remove_id(TABLE, format!("u{index}")))
@@ -398,11 +398,11 @@ fn bench_delete(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("tensack_write_many_remove", rows),
+            BenchmarkId::new("sixpack_write_many_remove", rows),
             &rows,
             |b, &rows| {
                 b.iter_batched(
-                    || populated_tensack(rows),
+                    || populated_sixpack(rows),
                     |(_dir, db)| {
                         let changes = (0..rows)
                             .map(|index| change::remove_id(TABLE, format!("u{index}")))

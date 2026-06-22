@@ -8,7 +8,7 @@ should not parse schema text as its normal path.
 ## Current Crate
 
 ```txt
-packages/tensack-schema-compiler
+packages/sixpack-schema-compiler
 ```
 
 ## Current Responsibilities

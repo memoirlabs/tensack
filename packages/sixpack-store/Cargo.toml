@@ -1,0 +1,13 @@
+[package]
+name = "sixpack-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+sixpack-core.workspace = true
+sixpack-format.workspace = true

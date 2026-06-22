@@ -1,0 +1,110 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const schemaSnippet = `sixpack::schema! {
+    messages {
+        id id
+        conversation_id id
+        body text
+
+        lookup conversation_id many
+    }
+}
+
+db.write(messages::add(messages::Row {
+    id: "m1".to_owned(),
+    conversation_id: "cv1".to_owned(),
+    body: "typed local state".to_owned(),
+}))?;
+
+let thread = db.get(messages::by::conversation_id("cv1"))?;`;
+---
+
+<BaseLayout
+  title="sixpack"
+  description="A local-first table database layer for typed Rust applications."
+>
+  <section class="section">
+    <div class="container hero">
+      <div>
+        <p class="eyebrow">local-first table storage</p>
+        <h1>the local database humans can read.</h1>
+        <p class="lead">
+          sixpack is for apps that want fast local data without turning their
+          state into a black box. Write with typed Rust APIs, inspect the files
+          when something breaks, and keep the hot path binary.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="/docs">Read the docs</a>
+          <a class="button" href="https://github.com/sixpack/sixpack">View source</a>
+        </div>
+      </div>
+      <div class="panel diagram" aria-label="sixpack storage flow">
+        <div class="node"><strong>schema</strong><span>declared tables and lookups</span></div>
+        <div class="node"><strong>typed API</strong><span>selectors and changes, no SQL strings</span></div>
+        <div class="node focus"><strong>.6</strong><span>readable append-only source data</span></div>
+        <div class="node focus"><strong>runtime .6b map</strong><span>hot ids, lookups, counts, and edits</span></div>
+        <div class="node"><strong>compact .6b</strong><span>rebuildable binary cache snapshot</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="grid">
+        <article class="card">
+          <h3>Schema-shaped API</h3>
+          <p>No SQL strings in application code. The schema defines rows, selectors, and write changes.</p>
+        </article>
+        <article class="card">
+          <h3>Readable truth</h3>
+          <p>`.6` segments remain the canonical append source. Generated files can be discarded and rebuilt.</p>
+        </article>
+        <article class="card">
+          <h3>Binary hot state</h3>
+          <p>Runtime `.6b` maps keep ids, lookups, counts, and edits off full-table traversal paths.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container prose">
+      <h2>Current benchmark snapshot</h2>
+      <p>
+        Results are from the current local hot-path benchmark: 10,000 rows
+        preloaded once, one live database handle, and 1,000 operations per
+        Criterion iteration.
+      </p>
+      <table class="metric-table">
+        <thead>
+          <tr>
+            <th>Operation</th>
+            <th>sixpack</th>
+            <th>SQLite</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>get by id</td><td>~0.50 ms</td><td>~3.19 ms</td></tr>
+          <tr><td>count</td><td>~26 us</td><td>~3.10 ms</td></tr>
+          <tr><td>add one-by-one</td><td>~38.7 ms</td><td>~301.1 ms</td></tr>
+          <tr><td>add batched</td><td>~4.28 ms</td><td>~6.83 ms</td></tr>
+          <tr><td>edit one-by-one</td><td>~38.8 ms</td><td>~5.69 ms</td></tr>
+          <tr><td>edit batched</td><td>~5.13 ms</td><td>~0.52 ms</td></tr>
+        </tbody>
+      </table>
+      <p>
+        SQLite remains much faster for large transactional update batches. The
+        current sixpack advantage is narrow: readable append data with fast
+        generated runtime projections for local state workloads.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container prose">
+      <h2>Minimal syntax</h2>
+      <pre><code>{schemaSnippet}</code></pre>
+    </div>
+  </section>
+</BaseLayout>

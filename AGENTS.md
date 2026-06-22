@@ -6,31 +6,31 @@ runtime status, and verification rules agents must follow.
 
 ## Project Purpose
 
-`tensack` is a local-first database layer for small tools, agent runtimes,
+`sixpack` is a local-first database layer for small tools, agent runtimes,
 desktop apps, research projects, and quantitative workflows. The root workspace
 is a **v0 scaffold**: crate boundaries exist, and a minimal runtime path is
-implemented for typed schema validation, `.ten` append writes, generated `.tenb`
+implemented for typed schema validation, `.6` append writes, generated `.6b`
 indexes, and simple `get` / `write` APIs.
 
 ## Target Package Boundaries
 
 The repository should continue toward these stable boundaries:
 
-- `packages/tensack-core`: shared domain types (workspace identity, model boundaries).
-- `packages/tensack-format`: durable file format boundary (header/validation/parsing paths).
-- `packages/tensack-store`: local storage engine boundary.
-- `packages/tensack`: composed runtime API (the DB handle + public orchestration).
-- `packages/tensack-cli`: CLI parsing/execution layer.
-- `packages/tensack-schema-compiler`: schema compilation crate (`schema!` parsing, validation, and raw Rust output).
-- `apps/tensack`: runnable binary that wires startup and delegates to `tensack-cli`.
+- `packages/sixpack-core`: shared domain types (workspace identity, model boundaries).
+- `packages/sixpack-format`: durable file format boundary (header/validation/parsing paths).
+- `packages/sixpack-store`: local storage engine boundary.
+- `packages/sixpack`: composed runtime API (the DB handle + public orchestration).
+- `packages/sixpack-cli`: CLI parsing/execution layer.
+- `packages/sixpack-schema-compiler`: schema compilation crate (`schema!` parsing, validation, and raw Rust output).
+- `apps/sixpack`: runnable binary that wires startup and delegates to `sixpack-cli`.
 - `apps/admin-ui` (planned): local viewer/admin surface.
 - `apps/test-lab` (experimental): broader test environment for temporary experiments, fixtures, and benchmark checks.
 - `tests/contracts`: executable behavior contracts over public behavior.
 - `tests/snapshots`: reviewed, stable-output regression assets.
 - `packages/docs/file-format.md` and `packages/docs/commands.md`: public-facing user docs.
 - `book/13-sqlite-mapping.md`: canonical mapping from simple SQLite operations
-  to generated Tensack `get` / `watch` / `write` syntax.
-- `book/14-write-engine.md`: canonical outline for the batch-first `.ten` write
+  to generated sixpack `get` / `watch` / `write` syntax.
+- `book/14-write-engine.md`: canonical outline for the batch-first `.6` write
   engine and recoverable metadata rules.
 - `user-scripts/install.sh`: local install script once the shell is feature-complete.
 
@@ -38,16 +38,16 @@ The repository should continue toward these stable boundaries:
 
 Current code includes:
 
-- App entrypoint is `apps/tensack`.
+- App entrypoint is `apps/sixpack`.
 - CLI surface currently documents only:
-  - `tensack --version`
-  - `tensack help`
+  - `sixpack --version`
+  - `sixpack help`
 - Core behavior includes:
-  - minimal schema primitives in `packages/tensack-core`,
-  - legacy JSONL event encoding/decoding helpers in `packages/tensack-format`,
-  - append-only `.ten` write batches, recoverable `tensack.toml` counters, and generated `.tenb` lookup caches in `packages/tensack-store`,
-  - a composed `get` / `write` / `write_many` API in `packages/tensack`.
-- Schema compiler in `packages/tensack-schema-compiler` with:
+  - minimal schema primitives in `packages/sixpack-core`,
+  - legacy JSONL event encoding/decoding helpers in `packages/sixpack-format`,
+  - append-only `.6` write batches, recoverable `sixpack.toml` counters, and generated `.6b` lookup caches in `packages/sixpack-store`,
+  - a composed `get` / `write` / `write_many` API in `packages/sixpack`.
+- Schema compiler in `packages/sixpack-schema-compiler` with:
   - `schema!` parser for importable schema snippets,
   - compile-time validation for naming/lookups/duplicates,
   - optional raw Rust row/table emission for generated APIs.
@@ -68,14 +68,14 @@ currently implemented.
   format, status, package boundaries, naming, testing, and schema compiler work.
 - `README.md` and `packages/docs/project-specs.md` for public structure and doc map.
 - `book/13-sqlite-mapping.md` for the authoritative explanation of how simple
-  SQLite-shaped operations map to Tensack's schema-declared selectors and changes.
+  SQLite-shaped operations map to sixpack's schema-declared selectors and changes.
 - `book/14-write-engine.md` for the authoritative write-path outline. If code
   and docs drift, restore the batch-first invariant described there.
 - `packages/docs/commands.md`, `packages/docs/file-format.md`,
   and `book/11-testing.md` for supporting contract language and test strategy.
 
-Older long-form docs such as `tensack_rust_backend_architecture.md` and
-`tensack_functional_addendum.md` are archived under `book/reference/`. If they
+Older long-form docs such as `sixpack_rust_backend_architecture.md` and
+`sixpack_functional_addendum.md` are archived under `book/reference/`. If they
 conflict with the book chapters, the book wins.
 
 ## Core Constraints
@@ -87,8 +87,8 @@ conflict with the book chapters, the book wins.
   `db.get(...)`, generated changes consumed by `db.write(...)`, and future
   subscriptions through `db.watch(...)`.
 - Do not expose storage internals as part of normal user APIs.
-- Keep `.ten` chunk files flat under each table directory
-  (`tables/<table>/<chunk>.ten`). Do not reintroduce generation folders unless
+- Keep `.6` chunk files flat under each table directory
+  (`tables/<table>/<chunk>.6`). Do not reintroduce generation folders unless
   explicitly requested.
 - Do not claim “implemented” when a feature is only planned or stubbed.
 - Avoid speculative abstractions outside the existing boundary model.
@@ -101,14 +101,14 @@ conflict with the book chapters, the book wins.
 
 ## Edit Map
 
-- `apps/tensack` — runnable CLI app.
-- `packages/tensack-core` — domain types.
-- `packages/tensack-format` — file format behavior.
-- `packages/tensack-store` — storage engine behavior.
-- `packages/tensack` — public DB API composition.
-- `packages/tensack-cli` — CLI command behavior.
-- `packages/tensack-testkit` — shared test helpers.
-- `packages/tensack-schema-compiler` — schema parse/validate/codegen crate.
+- `apps/sixpack` — runnable CLI app.
+- `packages/sixpack-core` — domain types.
+- `packages/sixpack-format` — file format behavior.
+- `packages/sixpack-store` — storage engine behavior.
+- `packages/sixpack` — public DB API composition.
+- `packages/sixpack-cli` — CLI command behavior.
+- `packages/sixpack-testkit` — shared test helpers.
+- `packages/sixpack-schema-compiler` — schema parse/validate/codegen crate.
 - `tests/contracts` — contract tests.
 - `tests/snapshots` — reviewed snapshots.
 - `apps/test-lab` — broad experiment workspace (UI prototypes + fixtures + speed/sync checks), separate from shipped admin UI.
@@ -128,7 +128,7 @@ conflict with the book chapters, the book wins.
 ## Testing Policy
 
 - Use temporary directories for data-bearing tests.
-- Never write disposable data to `.tensack`, `.data`, or repository root paths.
+- Never write disposable data to `.sixpack`, `.data`, or repository root paths.
 - Contract tests should validate external behavior, not private internals.
 - Snapshot tests should remain intentionally stable and manually reviewed.
 

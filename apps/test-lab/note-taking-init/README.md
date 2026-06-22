@@ -5,17 +5,17 @@ part of the core database implementation.
 
 It demonstrates the conservative lifecycle for a new app:
 
-1. Start with the smallest useful schema: `schema.v1.tensack` contains only a
+1. Start with the smallest useful schema: `schema.v1.sixpack` contains only a
    blank `notebooks` table.
 2. Run init and verify the database folder exists with the one table.
-3. Grow the schema: `schema.v2.tensack` adds a `notes` table.
+3. Grow the schema: `schema.v2.sixpack` adds a `notes` table.
 4. Run init again, write a notebook and note through the generated Rust SDK,
    and query the `notes.notebook_id` lookup.
-5. Grow the schema again: `schema.tensack` adds a `tags` table.
+5. Grow the schema again: `schema.sixpack` adds a `tags` table.
 6. Run init again, write a tag through the generated Rust SDK, and query the
    `tags.note_id` lookup.
 
-The crate build script generates the latest Rust SDK from `schema.tensack`.
+The crate build script generates the latest Rust SDK from `schema.sixpack`.
 The runtime example also writes generated Rust schema output under
 `target/test-lab/note-taking-init/generated/` for inspection and initializes a
 local database under `target/test-lab/note-taking-init/notes-db/`.
@@ -54,18 +54,18 @@ generated/
     schema-v2.rs
     schema-v3.rs
 notes-db/
-  tensack.toml
+  sixpack.toml
   engine/
-    notebooks.tenb
-    notes.tenb
-    tags.tenb
+    notebooks.6b
+    notes.6b
+    tags.6b
   tables/
     notebooks/
-      zzz.ten
+      zzz.6
     notes/
-      zzz.ten
+      zzz.6
     tags/
-      zzz.ten
+      zzz.6
 ```
 
 The latest schema has three tables:

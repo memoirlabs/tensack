@@ -97,14 +97,14 @@ WriteRequest
 PlanOp
 PlanEnvelope
 PlanOutcome
-TensackDatabase::get
-TensackDatabase::write
-TensackDatabase::write_many
-TensackDatabase::execute_plan
+Database::get
+Database::write
+Database::write_many
+Database::execute_plan
 ```
 
 `write_many` is not a different operation model. It resolves several
-same-table write plans into one storage batch so the store can append one `.ten`
+same-table write plans into one storage batch so the store can append one `.6`
 chunk and publish one generated index snapshot.
 
 Still needed:

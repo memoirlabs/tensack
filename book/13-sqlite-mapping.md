@@ -1,6 +1,6 @@
 # SQLite Mapping
 
-Tensack should be easy to explain to someone who knows SQLite, but it should
+sixpack should be easy to explain to someone who knows SQLite, but it should
 not become SQL-shaped.
 
 SQLite's normal surface is a string language:
@@ -9,7 +9,7 @@ SQLite's normal surface is a string language:
 SELECT * FROM messages WHERE conversation_id = ?;
 ```
 
-Tensack's normal surface is generated selectors and changes:
+sixpack's normal surface is generated selectors and changes:
 
 ```rust
 db.get(messages::by::conversation_id(conversation_id))?;
@@ -33,10 +33,10 @@ SQLite:
 table schema -> SQL string -> SQL parser/planner -> storage engine
 ```
 
-Tensack:
+sixpack:
 
 ```txt
-schema.tensack
+schema.sixpack
   -> schema compiler
   -> generated selectors and changes
   -> db.get(...) / db.write(...) / db.write_many(...)
@@ -59,7 +59,7 @@ INSERT INTO messages (id, conversation_id, body, created_at)
 VALUES (?, ?, ?, ?);
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.write(messages::add(row))?;
@@ -75,7 +75,7 @@ VALUES (...)
 ON CONFLICT(id) DO UPDATE SET ...;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.write(messages::set(row))?;
@@ -89,7 +89,7 @@ SQLite:
 SELECT * FROM messages WHERE id = ?;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.get(messages::by::id(message_id))?;
@@ -118,7 +118,7 @@ SQLite:
 SELECT * FROM users WHERE email = ? LIMIT 1;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.get(users::by::email(email))?;
@@ -148,7 +148,7 @@ SQLite:
 SELECT * FROM messages WHERE conversation_id = ?;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.get(messages::by::conversation_id(conversation_id))?;
@@ -166,7 +166,7 @@ SET body = ?
 WHERE id = ?;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.write(messages::edit(messages::key::id(message_id), patch))?;
@@ -183,7 +183,7 @@ SQLite:
 DELETE FROM messages WHERE id = ?;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.write(messages::remove(messages::key::id(message_id)))?;
@@ -202,7 +202,7 @@ UPDATE messages SET body = ? WHERE id = ?;
 COMMIT;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.write_many([
@@ -213,7 +213,7 @@ db.write_many([
 
 `write_many` is not a general transaction language. It is the simple public
 batch shape for one-table changes that can be validated before appending to the
-current `.ten` segment.
+current `.6` segment.
 
 ### Get A Page
 
@@ -223,7 +223,7 @@ SQLite:
 SELECT * FROM messages LIMIT 100;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.get(messages::all().limit(100))?;
@@ -241,13 +241,13 @@ SQLite:
 SELECT count(*) FROM messages;
 ```
 
-Tensack:
+sixpack:
 
 ```rust
 db.get(messages::count())?;
 ```
 
-## What a WHERE Clause Means in Tensack
+## What a WHERE Clause Means in sixpack
 
 Simple SQLite filters should map to schema decisions:
 
@@ -257,7 +257,7 @@ WHERE email = ?
 WHERE conversation_id = ?
 ```
 
-In Tensack, those fields must be explicit lookups when they are normal access
+In sixpack, those fields must be explicit lookups when they are normal access
 paths:
 
 ```rust
@@ -297,6 +297,6 @@ the generated API, but they should not imply that SQL is supported.
 Current CLI docs remain intentionally narrow because the shipped CLI only
 supports help and version commands.
 
-The storage format remains separate from this syntax. `.ten` files are durable
-local data segments, `.tenb` files are generated lookup caches, and neither is a
+The storage format remains separate from this syntax. `.6` files are durable
+local data segments, `.6b` files are generated lookup caches, and neither is a
 SQL database.

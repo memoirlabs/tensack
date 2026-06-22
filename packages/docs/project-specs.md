@@ -1,25 +1,25 @@
-# Tensack Documentation Map
+# sixpack Documentation Map
 
 This page maps the public documentation, active design notes, implementation
-status pages, and archived reference material for Tensack.
+status pages, and archived reference material for sixpack.
 
 ## Active Project Docs
 
 - [README.md](../../README.md) — public overview, API shape, benchmarks, and repository layout.
 - [book/README.md](../../book/README.md) — design book for philosophy, specs, and implementation direction.
-- [book/13-sqlite-mapping.md](../../book/13-sqlite-mapping.md) — canonical SQLite-to-Tensack `get`/`watch`/`write` mapping.
+- [book/13-sqlite-mapping.md](../../book/13-sqlite-mapping.md) — canonical SQLite-to-sixpack `get`/`watch`/`write` mapping.
 - [book/14-write-engine.md](../../book/14-write-engine.md) — canonical batch-first write engine outline.
 - [AGENTS.md](../../AGENTS.md) — working constraints for this repository and the source-of-truth model for implementation.
 - [packages/docs/commands.md](commands.md) — CLI contract (currently `--version` and `help`).
-- [packages/docs/file-format.md](file-format.md) — `.ten`, `.tenb`, metadata, and local directory layout.
+- [packages/docs/file-format.md](file-format.md) — `.6`, `.6b`, metadata, and local directory layout.
 - [tests/contracts/README.md](../../tests/contracts/README.md) — contract test boundary intent.
 - [tests/snapshots/README.md](../../tests/snapshots/README.md) — snapshot testing intent.
 - [benchmark/README.md](../../benchmark/README.md) — benchmark intent.
 - [apps/landing-page/index.html](../../apps/landing-page/index.html) — static docs app for the current backend map and storage layout.
 - [apps/admin-ui/README.md](../../apps/admin-ui/README.md) — admin UI intent.
 - [apps/test-lab/README.md](../../apps/test-lab/README.md) — isolated experiments for generated examples, speed checks, fixtures, and UI prototypes.
-- [packages/tensack-testkit/src/lib.rs](../tensack-testkit/src/lib.rs) — shared test helper crate.
-- [packages/tensack-schema-compiler/src/lib.rs](../tensack-schema-compiler/src/lib.rs) — build-time schema parser/validator/output.
+- [packages/sixpack-testkit/src/lib.rs](../sixpack-testkit/src/lib.rs) — shared test helper crate.
+- [packages/sixpack-schema-compiler/src/lib.rs](../sixpack-schema-compiler/src/lib.rs) — build-time schema parser/validator/output.
 
 ## Archived Reference Material
 

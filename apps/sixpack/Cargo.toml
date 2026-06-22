@@ -1,0 +1,13 @@
+[package]
+name = "sixpack-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "sixpack"
+path = "src/main.rs"
+
+[dependencies]
+sixpack-cli.workspace = true

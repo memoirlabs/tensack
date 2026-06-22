@@ -6,8 +6,8 @@ small, and easy to reason about.
 ## Invariant
 
 ```txt
-.ten  = canonical append-only operation log
-.tenb = generated immutable projection/index
+.6  = canonical append-only operation log
+.6b = generated immutable projection/index
 store = validate batch -> append batch -> publish projection
 ```
 
@@ -23,8 +23,8 @@ schema-generated change(s)
   -> plan envelope(s)
   -> resolved write batch
   -> store write batch
-  -> append to current .ten segment
-  -> one in-memory .tenb publish
+  -> append to current .6 segment
+  -> one in-memory .6b publish
   -> cached counter update
 ```
 
@@ -45,13 +45,13 @@ actions. Those belong above the store boundary.
   - `InsertOnly`: each put must create a new live id.
   - `Upsert`: puts replace live rows and deletes tombstone ids.
 - Validation happens before touching disk.
-- The in-memory `.tenb` projection is simulated before the `.ten` chunk is
+- The in-memory `.6b` projection is simulated before the `.6` chunk is
   written.
 - If validation fails, no chunk, cache, or metadata update should be published.
 
 ## Metadata Rule
 
-`tensack.toml` is operational state, not an operation log and not an index.
+`sixpack.toml` is operational state, not an operation log and not an index.
 
 Hot writes should keep only small counters and pointers:
 
@@ -66,32 +66,32 @@ Chunk lists, migration traces, generated SDK artifacts, and debug dumps are
 derived/internal artifacts. Normal users should see the current schema and use
 the public `get` / `write` surface unless they intentionally inspect internals.
 
-The generated `.tenb` file and `tensack.toml` are allowed to lag the hot write
+The generated `.6b` file and `sixpack.toml` are allowed to lag the hot write
 path because neither is canonical. Metadata can carry the latest known counters
-and source hash, but a later fresh handle must recover `next_tx` from `.ten`,
-reject stale `.tenb` bytes by hashing `.ten` data lines, and rebuild generated
+and source hash, but a later fresh handle must recover `next_tx` from `.6`,
+reject stale `.6b` bytes by hashing `.6` data lines, and rebuild generated
 state when needed.
 
 ## Runtime Snapshot Direction
 
-The generated `.tenb` file remains disposable. The runtime should treat a loaded
+The generated `.6b` file remains disposable. The runtime should treat a loaded
 or newly-built cache as an immutable snapshot:
 
 ```txt
-Arc<TenbCache>
+Arc<SixbCache>
 ```
 
 The next optimization step is a runtime-only wrapper:
 
 ```txt
-TenbSnapshot {
-  cache: Arc<TenbCache>,
+SixbSnapshot {
+  cache: Arc<SixbCache>,
   id index,
   lookup ranges,
 }
 ```
 
-That wrapper should improve repeated reads without changing the on-disk `.tenb`
+That wrapper should improve repeated reads without changing the on-disk `.6b`
 format or exposing storage internals.
 
 ## Resolution Direction
@@ -122,4 +122,4 @@ canonical log.
 - A second canonical format such as JSONL.
 
 Those may be useful in other systems, but they are not the next clean step for
-Tensack.
+sixpack.

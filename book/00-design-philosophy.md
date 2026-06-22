@@ -1,8 +1,8 @@
 # Design Philosophy
 
-Tensack should be small, local, inspectable, and schema-driven.
+sixpack should be small, local, inspectable, and schema-driven.
 
-The main mistake to avoid is making Tensack feel like a generic database wrapper
+The main mistake to avoid is making sixpack feel like a generic database wrapper
 or a pile of internal implementation details. The public surface should feel
 like the user’s own data model.
 
@@ -10,7 +10,7 @@ like the user’s own data model.
 
 ### Local first
 
-A Tensack database is a directory on disk.
+A sixpack database is a directory on disk.
 
 No hosted database is the primary engine. No SQL database is the primary engine.
 SQLite, Postgres, and hosted services can be useful comparison targets or
@@ -46,10 +46,10 @@ execute plans, not expose storage internals.
 
 ### Storage is not the API
 
-Paths like `tables/messages/zzz.ten` are important, but users should not have
+Paths like `tables/messages/zzz.6` are important, but users should not have
 to know them during normal application work.
 
-Storage details belong to `tensack-store` and file-format docs.
+Storage details belong to `sixpack-store` and file-format docs.
 
 ### Honest status
 

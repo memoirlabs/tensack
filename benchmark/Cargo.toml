@@ -1,5 +1,5 @@
 [package]
-name = "tensack-benchmark"
+name = "sixpack-benchmark"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,7 +7,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-tensack = { workspace = true }
+sixpack = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.5"
@@ -16,4 +16,8 @@ tempfile = "3"
 
 [[bench]]
 name = "crud_vs_sqlite"
+harness = false
+
+[[bench]]
+name = "hot_path"
 harness = false
