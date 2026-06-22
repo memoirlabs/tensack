@@ -75,6 +75,25 @@ pub struct AppendResult {
     pub bytes_written: u64,
 }
 
+/// Result of compacting one table's append segments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompactionResult {
+    /// Compacted table name.
+    pub table: String,
+    /// Number of live rows written into the compacted chunk.
+    pub live_rows: usize,
+    /// Number of `.6` chunks before compaction.
+    pub chunks_before: usize,
+    /// Number of `.6` chunks after compaction.
+    pub chunks_after: usize,
+    /// Total `.6` bytes before compaction.
+    pub bytes_before: u64,
+    /// Total `.6` bytes after compaction.
+    pub bytes_after: u64,
+    /// Chunk file holding the compacted rows.
+    pub chunk_name: String,
+}
+
 /// One append-only `.6` operation for a batch write.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppendOperation {
@@ -673,6 +692,75 @@ impl LocalStore {
             .map(|cache| cache.as_ref().clone())
     }
 
+    /// Rewrites one table to a single canonical `.6` chunk containing current live rows.
+    pub fn compact_table(
+        &self,
+        schema: &DatabaseSchema,
+        table_name: &str,
+    ) -> io::Result<CompactionResult> {
+        self.ensure_workspace_layout()?;
+        let table = schema
+            .table(table_name)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "unknown table"))?;
+        let writer = self.table_writer(table.name())?;
+        let _writer_guard = writer
+            .lock()
+            .map_err(|_| io::Error::other("table writer lock poisoned"))?;
+        self.ensure_table_layout(table, &schema.schema_hash())?;
+
+        let table_dir = self.table_dir(table.name());
+        fs::create_dir_all(&table_dir)?;
+        let old_paths = six_files_in_read_order(&table_dir)?;
+        let chunks_before = old_paths.len();
+        let bytes_before = old_paths.iter().try_fold(0u64, |total, path| {
+            fs::metadata(path).map(|metadata| total.saturating_add(metadata.len()))
+        })?;
+        let scan = self.scan_table_files(table)?;
+        let tx_start = self.discovered_next_tx_id()?;
+
+        let mut compacted = encode_six_preamble(table, &schema.schema_hash()).into_bytes();
+        for (index, live) in scan.live.values().enumerate() {
+            let tx_id = tx_start + index as u64;
+            let line = encode_six_operation(table, Operation::Put, tx_id, &live.record)
+                .map_err(format_error_to_io)?;
+            compacted.extend_from_slice(line.as_bytes());
+            compacted.push(b'\n');
+        }
+
+        let tmp = table_dir.join("compact.tmp");
+        fs::write(&tmp, &compacted)?;
+        for path in old_paths {
+            fs::remove_file(path)?;
+        }
+
+        let chunk_relative_path = chunk_path(0)?;
+        let chunk_name = chunk_path_to_name(&chunk_relative_path)?;
+        let final_path = table_dir.join(&chunk_relative_path);
+        fs::rename(&tmp, &final_path)?;
+        let bytes_after = fs::metadata(&final_path)?.len();
+        let live_rows = scan.live.len();
+
+        self.forget_table_chunks(table.name())?;
+        self.remember_chunk(table.name(), &chunk_name, compacted)?;
+        self.forget_sixb_cache(table.name())?;
+        self.forget_runtime_sixb_cache(table.name())?;
+        self.set_next_chunk_counter(table.name(), 1)?;
+        let next_tx = tx_start + live_rows as u64;
+        self.set_next_tx_id(next_tx)?;
+        self.rebuild_sixb(schema, table.name())?;
+        self.write_metadata(schema, next_tx)?;
+
+        Ok(CompactionResult {
+            table: table.name().to_owned(),
+            live_rows,
+            chunks_before,
+            chunks_after: 1,
+            bytes_before,
+            bytes_after,
+            chunk_name,
+        })
+    }
+
     fn ensure_sixb_snapshot(
         &self,
         schema: &DatabaseSchema,
@@ -1091,6 +1179,22 @@ impl LocalStore {
             .write()
             .map_err(|_| io::Error::other("chunk cache lock poisoned"))?
             .remove(&(table_name.to_owned(), chunk_name.to_owned()));
+        self.chunk_len_cache
+            .write()
+            .map_err(|_| io::Error::other("chunk length cache lock poisoned"))?
+            .remove(&(table_name.to_owned(), chunk_name.to_owned()));
+        Ok(())
+    }
+
+    fn forget_table_chunks(&self, table_name: &str) -> io::Result<()> {
+        self.chunk_cache
+            .write()
+            .map_err(|_| io::Error::other("chunk cache lock poisoned"))?
+            .retain(|(table, _), _| table != table_name);
+        self.chunk_len_cache
+            .write()
+            .map_err(|_| io::Error::other("chunk length cache lock poisoned"))?
+            .retain(|(table, _), _| table != table_name);
         Ok(())
     }
 
@@ -1288,6 +1392,14 @@ impl LocalStore {
         self.sixb_cache
             .write()
             .map_err(|_| io::Error::other("sixb cache lock poisoned"))?
+            .remove(table_name);
+        Ok(())
+    }
+
+    fn forget_runtime_sixb_cache(&self, table_name: &str) -> io::Result<()> {
+        self.runtime_sixb_cache
+            .write()
+            .map_err(|_| io::Error::other("runtime sixb cache lock poisoned"))?
             .remove(table_name);
         Ok(())
     }
@@ -2105,6 +2217,81 @@ mod tests {
 
         let recovered = LocalStore::new(&root, "db");
         assert_eq!(recovered.next_tx_id().unwrap(), 3);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn compact_table_rewrites_live_rows_and_rebuilds_cache() {
+        let root = temp_root("compact");
+        let schema = schema();
+        let store = LocalStore::new(&root, "db");
+
+        let original = Record::new("messages")
+            .with_id("m1")
+            .unwrap()
+            .with_field("body", "first")
+            .unwrap()
+            .with_field("created_at", 1i64)
+            .unwrap();
+        store.append_put(&schema, &original).unwrap();
+        for index in 0..25 {
+            let updated = Record::new("messages")
+                .with_id("m1")
+                .unwrap()
+                .with_field("body", format!("update {index}"))
+                .unwrap()
+                .with_field("created_at", i64::from(index + 2))
+                .unwrap();
+            store.append_put(&schema, &updated).unwrap();
+        }
+
+        let before = fs::metadata(store.chunk_six_path("messages", 0).unwrap())
+            .unwrap()
+            .len();
+        let result = store.compact_table(&schema, "messages").unwrap();
+
+        assert_eq!(result.table, "messages");
+        assert_eq!(result.live_rows, 1);
+        assert_eq!(result.chunks_before, 1);
+        assert_eq!(result.chunks_after, 1);
+        assert_eq!(result.bytes_before, before);
+        assert!(result.bytes_after < result.bytes_before);
+        assert_eq!(result.chunk_name, "zzz.6");
+        assert!(store.chunk_six_path("messages", 0).unwrap().exists());
+        assert!(!store.chunk_six_path("messages", 1).unwrap().exists());
+        assert_eq!(store.next_chunk_counter("messages").unwrap(), 1);
+
+        let chunk = fs::read_to_string(store.chunk_six_path("messages", 0).unwrap()).unwrap();
+        assert!(chunk.starts_with("SIX\t1\ttable\tmessages\t"));
+        assert!(chunk.contains("R\t27\tm1\tupdate 24\t26\n"));
+        assert!(!chunk.contains("\tfirst\t"));
+        assert!(!chunk.contains("\tupdate 0\t"));
+
+        let row = store.get_by_id(&schema, "messages", "m1").unwrap().unwrap();
+        assert_eq!(
+            row.fields().get("body"),
+            Some(&Value::Text("update 24".to_owned()))
+        );
+        let cache = store.ensure_sixb_current(&schema, "messages").unwrap();
+        assert_eq!(cache.rows.len(), 1);
+        assert_eq!(cache.rows[0].ptr.chunk_name, "zzz.6");
+
+        let metadata = fs::read_to_string(store.metadata_path()).unwrap();
+        assert!(metadata.contains("next_tx = 28"));
+        assert!(metadata.contains("next_chunk = 1"));
+        assert!(metadata.contains("file = \"engine/messages.6b\""));
+
+        let reopened = LocalStore::new(&root, "db");
+        let row = reopened
+            .get_by_id(&schema, "messages", "m1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            row.fields().get("body"),
+            Some(&Value::Text("update 24".to_owned()))
+        );
+        assert_eq!(reopened.next_tx_id().unwrap(), 28);
+
         let _ = fs::remove_dir_all(root);
     }
 

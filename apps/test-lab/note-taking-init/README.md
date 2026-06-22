@@ -36,6 +36,30 @@ Show internal details:
 cargo run -p note-taking-init -- --reset --show-internals
 ```
 
+Run a small update-speed pass and generate an HTML report:
+
+```sh
+cargo run -p note-taking-init -- --reset --speed-updates 1000 --show-internals
+```
+
+Run the same pass and compact the notes table afterward:
+
+```sh
+cargo run -p note-taking-init -- --reset --speed-updates 1000 --compact --show-internals
+```
+
+The report is written to:
+
+```txt
+target/test-lab/note-taking-init/generated/report.html
+target/test-lab/note-taking-init/generated/speed-report.json
+```
+
+This is intentionally a test-lab page, not part of the public landing site.
+It measures repeated generated-SDK `edit` writes against `note-1`. With
+`--compact`, the report also shows canonical `.6` bytes before and after
+rewriting live rows into a single compacted chunk.
+
 Run one phase at a time:
 
 ```sh
@@ -49,6 +73,8 @@ Expected final database shape:
 ```txt
 generated/
   schema.rs
+  report.html
+  speed-report.json
   internals/
     schema-v1.rs
     schema-v2.rs

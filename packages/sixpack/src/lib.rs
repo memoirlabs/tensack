@@ -11,7 +11,9 @@ pub use sixpack_core::{
     DatabaseSchema, FieldSpec, PrimitiveType, Record, SchemaError, TableSchema, Value, Workspace,
 };
 pub use sixpack_format::Operation;
-pub use sixpack_store::{AppendOperation, AppendResult, LocalStore, WriteBatch, WriteBatchMode};
+pub use sixpack_store::{
+    AppendOperation, AppendResult, CompactionResult, LocalStore, WriteBatch, WriteBatchMode,
+};
 
 const DEFAULT_PLAN_LIMIT: usize = 100;
 const MAX_PLAN_LIMIT: usize = 1_000;
@@ -1074,6 +1076,13 @@ impl Database {
         self.store
             .rebuild_sixb(&self.schema, table_name)
             .map(|_| ())
+            .map_err(DatabaseError::from)
+    }
+
+    /// Rewrites one table's canonical `.6` data to current live rows only.
+    pub fn compact_table(&self, table_name: &str) -> Result<CompactionResult, DatabaseError> {
+        self.store
+            .compact_table(&self.schema, table_name)
             .map_err(DatabaseError::from)
     }
 
