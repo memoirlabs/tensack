@@ -1,23 +1,60 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const schemaSnippet = `sixpack::schema! {
-    messages {
-        id id
-        conversation_id id
-        body text
+const examples = [
+  {
+    label: "schema.sixpack",
+    title: "Schema first",
+    body: "The pretty part is the source of truth. Tables, fields, and lookups stay small enough to read.",
+    code: `<span class="c-key">schema</span><span class="c-punc">!</span> <span class="c-punc">{</span>
+  <span class="c-table">notebooks</span> <span class="c-punc">{</span>
+    <span class="c-field">id</span> <span class="c-type">id</span>
+    <span class="c-field">title</span> <span class="c-type">text</span>
+    <span class="c-field">created_at</span> <span class="c-type">int</span>
+  <span class="c-punc">}</span>
 
-        lookup conversation_id many
-    }
-}
+  <span class="c-table">notes</span> <span class="c-punc">{</span>
+    <span class="c-field">id</span> <span class="c-type">id</span>
+    <span class="c-field">notebook_id</span> <span class="c-type">id</span>
+    <span class="c-field">title</span> <span class="c-type">text</span>
+    <span class="c-field">body</span> <span class="c-type">text</span>
+    <span class="c-field">updated_at</span> <span class="c-type">int</span>
 
-db.write(messages::add(messages::Row {
-    id: "m1".to_owned(),
-    conversation_id: "cv1".to_owned(),
-    body: "typed local state".to_owned(),
-}))?;
+    <span class="c-key">lookup</span> <span class="c-field">notebook_id</span> <span class="c-type">many</span>
+    <span class="c-key">lookup</span> <span class="c-field">updated_at</span> <span class="c-type">many</span>
+  <span class="c-punc">}</span>
+<span class="c-punc">}</span>`,
+  },
+  {
+    label: "generated Rust",
+    title: "Typed calls",
+    body: "Generated selectors and write changes replace SQL strings with compiler-checked app code.",
+    code: `<span class="c-key">let</span> <span class="c-ident">db</span> <span class="c-op">=</span> <span class="c-fn">Database</span><span class="c-punc">::</span><span class="c-fn">open_local_with_schema</span><span class="c-punc">(</span>
+  <span class="c-str">"./data"</span><span class="c-punc">,</span>
+  <span class="c-str">"notes-db"</span><span class="c-punc">,</span>
+  <span class="c-fn">database_schema</span><span class="c-punc">()</span>
+<span class="c-punc">);</span>
 
-let thread = db.get(messages::by::conversation_id("cv1"))?;`;
+<span class="c-ident">db</span><span class="c-punc">.</span><span class="c-fn">write</span><span class="c-punc">(</span><span class="c-table">notes</span><span class="c-punc">::</span><span class="c-fn">add</span><span class="c-punc">(</span><span class="c-table">notes</span><span class="c-punc">::</span><span class="c-type">Row</span> <span class="c-punc">{</span>
+  <span class="c-field">id</span><span class="c-punc">:</span> <span class="c-str">"note-1"</span><span class="c-punc">.</span><span class="c-fn">to_owned</span><span class="c-punc">(),</span>
+  <span class="c-field">notebook_id</span><span class="c-punc">:</span> <span class="c-str">"inbox"</span><span class="c-punc">.</span><span class="c-fn">to_owned</span><span class="c-punc">(),</span>
+  <span class="c-field">title</span><span class="c-punc">:</span> <span class="c-str">"Ship the map"</span><span class="c-punc">.</span><span class="c-fn">to_owned</span><span class="c-punc">(),</span>
+  <span class="c-field">body</span><span class="c-punc">:</span> <span class="c-str">"Readable rows, private speed."</span><span class="c-punc">.</span><span class="c-fn">to_owned</span><span class="c-punc">(),</span>
+  <span class="c-field">updated_at</span><span class="c-punc">:</span> <span class="c-num">1_700_100_000</span><span class="c-punc">,</span>
+<span class="c-punc">}))?;</span>
+
+<span class="c-key">let</span> <span class="c-ident">inbox</span> <span class="c-op">=</span> <span class="c-ident">db</span><span class="c-punc">.</span><span class="c-fn">get</span><span class="c-punc">(</span><span class="c-table">notes</span><span class="c-punc">::</span><span class="c-ident">by</span><span class="c-punc">::</span><span class="c-fn">notebook_id</span><span class="c-punc">(</span><span class="c-str">"inbox"</span><span class="c-punc">))?;</span>`,
+  },
+  {
+    label: "tables/notes/zzz.6",
+    title: "Actual data on disk",
+    body: "This is row data after writes. No schema header, no viewer, no guessing what changed.",
+    code: `<span class="c-dim"># actual note rows</span>
+<span class="c-key">R</span> <span class="c-num">1002</span> <span class="c-str">note-1</span> <span class="c-str">inbox</span> <span class="c-str">First note</span> <span class="c-str">Draft the launch page</span> <span class="c-num">1700100000</span>
+<span class="c-key">R</span> <span class="c-num">1003</span> <span class="c-str">note-1</span> <span class="c-str">inbox</span> <span class="c-str">Ship the map</span> <span class="c-str">Readable rows, private speed.</span> <span class="c-num">1700100038</span>
+<span class="c-key">D</span> <span class="c-num">1004</span> <span class="c-str">scratch-note</span>`,
+  },
+];
 
 const metrics = [
   { op: "get by id", sixpack: "0.50 ms", lite: "3.19 ms", win: true },
@@ -172,37 +209,71 @@ const layoutRows = [
       </div>
     </section>
 
-    <section class="block">
+    <section class="block examples-block">
       <div class="wrap">
-        <p class="kicker">/ benchmark snapshot</p>
-        <h2 class="head-lg">Honest numbers.</h2>
-        <p class="muted bench-note">
-          10,000 rows preloaded once, one live handle, 1,000 operations per
-          Criterion iteration. SQLite still wins big transactional update
-          batches — we show that too.
-        </p>
-        <div class="bench">
-          {metrics.map((m) => (
-            <div class="bench-row">
-              <span class="bench-op">{m.op}</span>
-              <span class={`pill ${m.win ? "pill-win" : "pill-lose"}`}>sixpack {m.sixpack}</span>
-              <span class="pill pill-neutral">sqlite {m.lite}</span>
-            </div>
+        <div class="examples-head">
+          <div>
+            <p class="kicker">/ examples</p>
+            <h2 class="head-lg">The syntax should sell it.</h2>
+          </div>
+          <p class="muted">
+            A schema that reads clean, generated calls that stay typed, and
+            bytes on disk that still make sense when you open the folder.
+          </p>
+        </div>
+        <div class="example-grid">
+          {examples.map((example, index) => (
+            <article class={`example-card ${index === 0 ? "example-primary" : ""}`}>
+              <div class="example-copy">
+                <span class="example-label">{example.label}</span>
+                <h3>{example.title}</h3>
+                <p>{example.body}</p>
+              </div>
+              <div class="code-shell">
+                <div class="code-bar" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                  <em>{example.label}</em>
+                </div>
+                <pre class="code-body"><code set:html={example.code}></code></pre>
+              </div>
+            </article>
           ))}
         </div>
-      </div>
-    </section>
-
-    <section class="block">
-      <div class="wrap">
-        <p class="kicker">/ minimal syntax</p>
-        <h2 class="head-lg">Declare it once.</h2>
-        <div class="code-shell">
-          <div class="code-bar" aria-hidden="true">
-            <span></span><span></span><span></span>
-            <em>messages.rs</em>
+        <div class="data-contrast">
+          <div class="contrast-copy">
+            <p class="kicker">/ same idea, different vibe</p>
+            <h3><code>.sqlite</code> vs <code>.6</code>, at a glance.</h3>
           </div>
-          <pre class="code-body"><code>{schemaSnippet}</code></pre>
+          <div class="contrast-grid">
+            <div class="contrast-panel contrast-binary">
+              <span>.sqlite</span>
+              <code>01010011 01010001 01001100 01101001<br />00000000 11101010 01011100 10010001<br />10110100 00001010 01100011 00011100</code>
+            </div>
+            <div class="contrast-panel contrast-readable">
+              <span>sixpack .6 actual data</span>
+              <code>R 1003 note-1 inbox Ship the map<br />R 1004 note-1 inbox Final copy<br />D 1005 scratch-note</code>
+            </div>
+          </div>
+        </div>
+        <div class="bench-under">
+          <div class="bench-copy">
+            <p class="kicker">/ sqlite benchmark snapshot</p>
+            <h3>Honest numbers.</h3>
+            <p>
+              10,000 rows preloaded once, one live handle, 1,000 operations per
+              Criterion iteration. SQLite still wins big transactional update
+              batches.
+            </p>
+          </div>
+          <div class="bench">
+            {metrics.map((m) => (
+              <div class="bench-row">
+                <span class="bench-op">{m.op}</span>
+                <span class={`pill ${m.win ? "pill-win" : "pill-lose"}`}>sixpack {m.sixpack}</span>
+                <span class="pill pill-neutral">sqlite {m.lite}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -246,6 +317,15 @@ const layoutRows = [
     padding: clamp(44px, 7vw, 84px) 0 clamp(32px, 4vw, 52px);
   }
 
+  .hero .wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: min(1180px, calc(100% - 32px));
+    padding-left: clamp(18px, 6vw, 104px);
+    padding-right: clamp(18px, 4vw, 64px);
+  }
+
   .eyebrow {
     position: relative;
     z-index: 1;
@@ -269,11 +349,13 @@ const layoutRows = [
     position: relative;
     z-index: 1;
     margin: 18px 0 0;
+    max-width: 1040px;
     font-family: "Space Grotesk", sans-serif;
-    font-size: clamp(52px, 9vw, 110px);
+    font-size: clamp(52px, 8.6vw, 108px);
     font-weight: 600;
     line-height: 0.9;
     letter-spacing: -0.035em;
+    text-align: left;
     color: var(--ink);
   }
 
@@ -289,14 +371,16 @@ const layoutRows = [
     position: relative;
     z-index: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-    gap: clamp(24px, 5vw, 56px);
-    align-items: end;
+    grid-template-columns: minmax(0, 620px) auto;
+    justify-content: start;
+    justify-items: start;
+    gap: clamp(20px, 3vw, 30px);
     margin-top: clamp(24px, 3vw, 36px);
+    text-align: left;
   }
 
   .lead-lg {
-    max-width: 50ch;
+    max-width: 620px;
     color: var(--muted);
     font-size: clamp(17px, 1.7vw, 21px);
     line-height: 1.5;
@@ -305,12 +389,15 @@ const layoutRows = [
   .hero-side {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
+    justify-content: end;
     gap: 16px;
   }
 
   .actions {
     display: flex;
     flex-wrap: wrap;
+    justify-content: flex-start;
     gap: 12px;
   }
 
@@ -351,6 +438,7 @@ const layoutRows = [
   }
 
   .hero-note {
+    max-width: 560px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 12.5px;
     color: var(--muted-soft);
@@ -567,6 +655,32 @@ const layoutRows = [
     margin-bottom: 30px;
   }
 
+  .bench-under {
+    display: grid;
+    grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
+    gap: clamp(20px, 4vw, 44px);
+    align-items: start;
+    margin-top: clamp(34px, 6vw, 66px);
+    padding-top: clamp(28px, 4vw, 44px);
+    border-top: 1px solid var(--line);
+  }
+
+  .bench-copy h3,
+  .contrast-copy h3 {
+    color: var(--ink);
+    font-family: "Space Grotesk", sans-serif;
+    font-size: clamp(24px, 3vw, 34px);
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  .bench-copy p {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+
   .bench {
     display: grid;
     gap: 8px;
@@ -613,25 +727,143 @@ const layoutRows = [
     color: var(--muted-soft);
   }
 
-  /* ---------- code ---------- */
+  .data-contrast {
+    display: grid;
+    grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
+    gap: clamp(20px, 4vw, 44px);
+    align-items: start;
+    margin-top: clamp(34px, 6vw, 66px);
+    padding-top: clamp(28px, 4vw, 44px);
+    border-top: 1px solid var(--line);
+  }
+
+  .contrast-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .contrast-panel {
+    min-width: 0;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: #050505;
+    padding: 14px;
+  }
+
+  .contrast-panel span {
+    display: block;
+    margin-bottom: 12px;
+    color: var(--muted-soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .contrast-panel code {
+    display: block;
+    overflow-x: auto;
+    color: rgba(250, 250, 250, 0.42);
+    font-size: 12.5px;
+    line-height: 1.7;
+    white-space: nowrap;
+  }
+
+  .contrast-readable {
+    border-color: rgba(182, 242, 61, 0.32);
+    background: rgba(182, 242, 61, 0.055);
+  }
+
+  .contrast-readable span,
+  .contrast-readable code {
+    color: var(--accent-bright);
+  }
+
+  /* ---------- examples / code ---------- */
+  .examples-block {
+    background: #000;
+  }
+
+  .examples-head {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(280px, 0.8fr);
+    gap: clamp(24px, 5vw, 64px);
+    align-items: end;
+    margin-bottom: clamp(28px, 5vw, 56px);
+  }
+
+  .examples-head .muted {
+    margin-top: 0;
+  }
+
+  .example-grid {
+    display: grid;
+    gap: clamp(34px, 5vw, 58px);
+  }
+
+  .example-card {
+    min-width: 0;
+  }
+
+  .example-primary .code-shell {
+    border-color: rgba(182, 242, 61, 0.32);
+  }
+
+  .example-copy {
+    padding: 0 0 18px;
+  }
+
+  .example-label {
+    display: inline-flex;
+    width: fit-content;
+    border: 1px solid rgba(182, 242, 61, 0.28);
+    padding: 4px 8px;
+    color: var(--accent-bright);
+    background: rgba(182, 242, 61, 0.08);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .example-copy h3 {
+    margin-top: 14px;
+    color: var(--ink);
+    font-family: "Space Grotesk", sans-serif;
+    font-size: clamp(24px, 3vw, 34px);
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  .example-copy p {
+    max-width: 48ch;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+
   .code-shell {
-    margin-top: 28px;
-    border: 1px solid var(--line);
-    background: #060606;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: #050505;
+    overflow: hidden;
   }
 
   .code-bar {
     display: flex;
     align-items: center;
     gap: 7px;
+    min-height: 42px;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .code-bar span {
-    width: 11px;
-    height: 11px;
-    background: var(--line-strong);
+    width: 9px;
+    height: 9px;
+    background: rgba(250, 250, 250, 0.18);
+  }
+
+  .example-primary .code-bar span:first-child {
+    background: var(--accent-bright);
   }
 
   .code-bar em {
@@ -645,15 +877,69 @@ const layoutRows = [
   .code-body {
     margin: 0;
     background: transparent;
-    padding: 22px;
-    font-size: 14px;
+    padding: clamp(18px, 2.4vw, 26px);
+    color: #f7f7ef;
+    font-size: 13.5px;
+    line-height: 1.72;
+    overflow-x: auto;
+    tab-size: 2;
+  }
+
+  .example-primary .code-body {
+    font-size: clamp(14px, 1.42vw, 16px);
+  }
+
+  .code-body code {
+    display: block;
+    min-width: max-content;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  :global(.c-key),
+  :global(.c-meta) {
+    color: var(--accent-bright);
+    font-weight: 760;
+  }
+
+  :global(.c-table) {
+    color: #f8ffe6;
+    font-weight: 760;
+  }
+
+  :global(.c-field),
+  :global(.c-ident) {
+    color: #e9e9e9;
+  }
+
+  :global(.c-type),
+  :global(.c-fn) {
+    color: #c9f96a;
+  }
+
+  :global(.c-str) {
+    color: #a8d951;
+  }
+
+  :global(.c-num) {
+    color: #ffffff;
+  }
+
+  :global(.c-punc),
+  :global(.c-op),
+  :global(.c-dim) {
+    color: rgba(250, 250, 250, 0.46);
   }
 
   @media (max-width: 860px) {
     .hero-grid,
     .features,
     .stat-grid,
-    .split {
+    .split,
+    .examples-head,
+    .example-grid,
+    .data-contrast,
+    .bench-under,
+    .contrast-grid {
       grid-template-columns: 1fr;
     }
 
