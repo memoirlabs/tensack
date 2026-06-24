@@ -9,6 +9,7 @@ members = [
   "packages/sixpack-testkit",
   "packages/sixpack-schema-compiler",
   "apps/test-lab/note-taking-init",
+  "apps/test-lab/note-taking-playground",
   "benchmark",
 ]
 resolver = "2"

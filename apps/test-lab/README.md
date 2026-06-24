@@ -28,4 +28,7 @@ Supporting files:
 
 - `fixtures/` for example payloads and test input data.
 - `experiments/` for active short-lived experiment notes.
-- `note-taking-init/` for a compiler/init experiment that builds an empty two-table notes database under `target/test-lab/`.
+- `note-taking-init/` for the minimal compiler/init lifecycle example. Keep it
+  small and untouched when experimenting with richer database behavior.
+- `note-taking-playground/` for a real sixpack-backed notes UI playground with
+  CRUD, polling, write/read timing, disk-size display, and compaction checks.

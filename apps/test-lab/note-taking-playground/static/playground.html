@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sixpack note playground</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #000;
+        --panel: #070707;
+        --panel-2: #0d0d0d;
+        --line: #2a2a2a;
+        --ink: #f5f5f5;
+        --muted: #9c9c9c;
+        --lime: #caff4f;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      main {
+        width: min(1180px, calc(100% - 28px));
+        margin: 0 auto;
+        padding: 28px 0 44px;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: end;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 22px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 780px;
+        font-size: clamp(42px, 7vw, 86px);
+        line-height: 0.94;
+        letter-spacing: -0.03em;
+      }
+
+      .kicker,
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .kicker {
+        margin-bottom: 12px;
+        color: var(--lime);
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      button {
+        min-height: 38px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+
+      button.primary {
+        border-color: var(--lime);
+        background: var(--lime);
+        color: #101600;
+        font-weight: 700;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.35fr);
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding: 14px;
+      }
+
+      .panel-body {
+        padding: 14px;
+      }
+
+      form {
+        display: grid;
+        gap: 10px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        background: #020202;
+        color: var(--ink);
+        padding: 10px;
+      }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-top: 1px solid var(--line);
+        border-left: 1px solid var(--line);
+        margin-top: 18px;
+      }
+
+      .metric {
+        min-height: 86px;
+        border-right: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        padding: 12px;
+      }
+
+      .metric strong {
+        display: block;
+        color: var(--lime);
+        font-size: 26px;
+        line-height: 1;
+      }
+
+      .metric span {
+        display: block;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .notes {
+        display: grid;
+        gap: 8px;
+      }
+
+      .note {
+        display: grid;
+        gap: 8px;
+        border: 1px solid var(--line);
+        background: #030303;
+        padding: 12px;
+      }
+
+      .note.is-active {
+        border-color: var(--lime);
+      }
+
+      .note-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .note h3 {
+        font-size: 18px;
+      }
+
+      .note p {
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .note-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .status {
+        min-height: 22px;
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .disk {
+        display: grid;
+        gap: 8px;
+        margin-top: 18px;
+      }
+
+      .disk-row {
+        display: grid;
+        grid-template-columns: minmax(160px, 0.5fr) minmax(0, 1fr);
+        gap: 10px;
+        border-bottom: 1px solid var(--line);
+        padding: 8px 0;
+        font-size: 13px;
+      }
+
+      .disk-row strong {
+        color: var(--lime);
+      }
+
+      .pulse {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin-right: 7px;
+        background: var(--line);
+      }
+
+      .pulse.on {
+        background: var(--lime);
+      }
+
+      @media (max-width: 860px) {
+        header,
+        .grid,
+        .metrics {
+          grid-template-columns: 1fr;
+        }
+
+        header {
+          align-items: start;
+        }
+
+        .toolbar {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="kicker">sixpack test-lab / live database playground</p>
+          <h1>Write a note. Watch the database answer.</h1>
+        </div>
+        <div class="toolbar">
+          <button id="refreshBtn">Refresh</button>
+          <button id="pollBtn">Polling off</button>
+          <button id="seedBtn">Seed</button>
+          <button id="compactBtn">Compact</button>
+        </div>
+      </header>
+
+      <section class="metrics" aria-label="timing metrics">
+        <div class="metric"><strong id="noteCount">0</strong><span>live notes</span></div>
+        <div class="metric"><strong id="revision">0</strong><span>database revision</span></div>
+        <div class="metric"><strong id="lastWrite">-</strong><span>last write API</span></div>
+        <div class="metric"><strong id="lastRefresh">-</strong><span>last refresh</span></div>
+      </section>
+
+      <div class="grid">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Create / edit</h2>
+            <span class="mono muted" id="activeId">new note</span>
+          </div>
+          <div class="panel-body">
+            <form id="noteForm">
+              <label>
+                Title
+                <input id="titleInput" autocomplete="off" value="Live playground note" />
+              </label>
+              <label>
+                Body
+                <textarea id="bodyInput">Edit me and watch the timings update.</textarea>
+              </label>
+              <div class="toolbar">
+                <button class="primary" type="submit">Save note</button>
+                <button id="newBtn" type="button">New</button>
+              </div>
+            </form>
+            <p class="status" id="status"></p>
+            <div class="disk" id="disk"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2><span class="pulse" id="pulse"></span>Live rows</h2>
+            <span class="mono muted" id="pollStatus">manual refresh</span>
+          </div>
+          <div class="panel-body">
+            <div class="notes" id="notes"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const state = {
+        activeId: null,
+        poll: false,
+        pollTimer: null,
+        lastRevision: 0,
+      };
+
+      const els = {
+        activeId: document.getElementById("activeId"),
+        body: document.getElementById("bodyInput"),
+        compact: document.getElementById("compactBtn"),
+        disk: document.getElementById("disk"),
+        form: document.getElementById("noteForm"),
+        lastRefresh: document.getElementById("lastRefresh"),
+        lastWrite: document.getElementById("lastWrite"),
+        newBtn: document.getElementById("newBtn"),
+        noteCount: document.getElementById("noteCount"),
+        notes: document.getElementById("notes"),
+        poll: document.getElementById("pollBtn"),
+        pollStatus: document.getElementById("pollStatus"),
+        pulse: document.getElementById("pulse"),
+        refresh: document.getElementById("refreshBtn"),
+        revision: document.getElementById("revision"),
+        seed: document.getElementById("seedBtn"),
+        status: document.getElementById("status"),
+        title: document.getElementById("titleInput"),
+      };
+
+      function fmt(ms) {
+        if (ms == null) return "-";
+        return ms < 1 ? `${(ms * 1000).toFixed(0)} us` : `${ms.toFixed(2)} ms`;
+      }
+
+      async function api(path, options = {}) {
+        const start = performance.now();
+        const response = await fetch(path, {
+          headers: { "content-type": "application/json" },
+          ...options,
+        });
+        const elapsed = performance.now() - start;
+        const text = await response.text();
+        const json = text ? JSON.parse(text) : {};
+        if (!response.ok) {
+          throw new Error(json.error || response.statusText);
+        }
+        json.client_ms = elapsed;
+        return json;
+      }
+
+      async function refresh(label = "refresh") {
+        const data = await api("/api/state");
+        render(data);
+        els.lastRefresh.textContent = fmt(data.client_ms);
+        els.status.textContent = `${label}: ${fmt(data.timings.read_ms)} db read, ${fmt(data.client_ms)} round trip`;
+      }
+
+      function render(data) {
+        els.noteCount.textContent = data.notes.length;
+        els.revision.textContent = data.revision;
+        els.disk.innerHTML = `
+          <div class="disk-row"><strong>database</strong><span class="mono">${data.disk.database_path}</span></div>
+          <div class="disk-row"><strong>.6 bytes</strong><span>${data.disk.six_bytes}</span></div>
+          <div class="disk-row"><strong>.6b bytes</strong><span>${data.disk.sixb_bytes}</span></div>
+          <div class="disk-row"><strong>chunks</strong><span>${data.disk.chunk_count}</span></div>
+        `;
+        els.notes.innerHTML = data.notes
+          .map((note) => `
+            <article class="note ${note.id === state.activeId ? "is-active" : ""}" data-id="${note.id}">
+              <div class="note-top">
+                <div>
+                  <h3>${escapeHtml(note.title)}</h3>
+                  <span class="mono muted">${escapeHtml(note.id)} / ${note.updated_at}</span>
+                </div>
+                <div class="note-actions">
+                  <button data-edit="${note.id}">Edit</button>
+                  <button data-delete="${note.id}">Delete</button>
+                </div>
+              </div>
+              <p>${escapeHtml(note.body)}</p>
+            </article>
+          `)
+          .join("");
+        if (data.revision !== state.lastRevision) {
+          els.pulse.classList.add("on");
+          setTimeout(() => els.pulse.classList.remove("on"), 180);
+        }
+        state.lastRevision = data.revision;
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[char]);
+      }
+
+      function resetForm() {
+        state.activeId = null;
+        els.activeId.textContent = "new note";
+        els.title.value = "Live playground note";
+        els.body.value = "Edit me and watch the timings update.";
+      }
+
+      els.form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const payload = JSON.stringify({ title: els.title.value, body: els.body.value });
+        const path = state.activeId ? `/api/notes/${encodeURIComponent(state.activeId)}` : "/api/notes";
+        const method = state.activeId ? "PATCH" : "POST";
+        const result = await api(path, { method, body: payload });
+        state.activeId = result.note.id;
+        els.activeId.textContent = result.note.id;
+        els.lastWrite.textContent = fmt(result.timings.write_ms);
+        await refresh(method === "POST" ? "created" : "updated");
+      });
+
+      els.notes.addEventListener("click", async (event) => {
+        const edit = event.target.closest("[data-edit]");
+        const remove = event.target.closest("[data-delete]");
+        if (edit) {
+          const id = edit.dataset.edit;
+          const data = await api("/api/state");
+          const note = data.notes.find((row) => row.id === id);
+          if (!note) return;
+          state.activeId = note.id;
+          els.activeId.textContent = note.id;
+          els.title.value = note.title;
+          els.body.value = note.body;
+          render(data);
+        }
+        if (remove) {
+          const id = remove.dataset.delete;
+          const result = await api(`/api/notes/${encodeURIComponent(id)}`, { method: "DELETE" });
+          els.lastWrite.textContent = fmt(result.timings.write_ms);
+          if (state.activeId === id) resetForm();
+          await refresh("deleted");
+        }
+      });
+
+      els.refresh.addEventListener("click", () => refresh());
+      els.newBtn.addEventListener("click", resetForm);
+      els.seed.addEventListener("click", async () => {
+        const result = await api("/api/seed", { method: "POST", body: "{}" });
+        els.lastWrite.textContent = fmt(result.timings.write_ms);
+        await refresh("seeded");
+      });
+      els.compact.addEventListener("click", async () => {
+        const result = await api("/api/compact", { method: "POST", body: "{}" });
+        els.status.textContent = `compacted ${result.bytes_before} -> ${result.bytes_after} bytes`;
+        await refresh("compacted");
+      });
+      els.poll.addEventListener("click", () => {
+        state.poll = !state.poll;
+        els.poll.textContent = state.poll ? "Polling on" : "Polling off";
+        els.pollStatus.textContent = state.poll ? "polling every 250ms" : "manual refresh";
+        if (state.poll) {
+          state.pollTimer = setInterval(() => refresh("poll").catch((error) => {
+            els.status.textContent = error.message;
+          }), 250);
+        } else {
+          clearInterval(state.pollTimer);
+        }
+      });
+
+      refresh("loaded").catch((error) => {
+        els.status.textContent = error.message;
+      });
+    </script>
+  </body>
+</html>

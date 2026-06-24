@@ -1,0 +1,15 @@
+[package]
+name = "note-taking-playground"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "note-taking-playground"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sixpack.workspace = true
